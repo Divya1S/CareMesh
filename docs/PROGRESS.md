@@ -5,9 +5,21 @@
 
 ## Current phase
 
-**Hiring upgrade plan (approved 2026-08-10): H1 through H4 complete. H5
-(MCP server) next, then H6 (Dockerfiles, deployment docs, load numbers,
-final review).**
+**Hiring upgrade plan (approved 2026-08-10): H1 through H5 complete. H6
+(Dockerfiles, deployment docs, load numbers, final review) remains.**
+
+- H5 done 2026-08-11 (gate green; 114 backend tests): MCP server at
+  backend/mcp_server (mcp SDK 2.0, stdio) with two allow listed read
+  only tools: search_resources (KnowledgeService.retrieve with
+  citations) and get_platform_stats (org scoped counts). Tenant scope
+  is hard: MCP_ORG_NAME resolves one organization, unknown names error.
+  Integration test drives it through the SDK's real Client over the in
+  memory transport. README has connect snippets for Claude Desktop and
+  Claude Code; THREAT_MODEL gained the MCP boundary row. SDK 2.0
+  gotchas: FastMCP is now mcp.server.mcpserver.MCPServer, tools must
+  annotate returns as dict[str, Any] (bare dict falls back to text
+  content, structured_content stays None), and the result field is
+  structured_content not structuredContent.
 
 - H4 done 2026-08-11 (gate green; 112 backend tests): real Gemini
   adapter (`infrastructure/ai/gemini_provider.py`, plain httpx, no
