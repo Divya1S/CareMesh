@@ -28,6 +28,18 @@ and the API to a visible badge on every AI element. Real adapters plug in
 behind the same interface and are the only thing in the project that can
 cost money.
 
+`LLM_PROVIDER=gemini` selects the real Gemini adapter
+(`infrastructure/ai/gemini_provider.py`): plain httpx against the REST
+API, no vendor SDK, mapping completions, structured JSON output, tool
+calls, and SSE streaming onto the same request and response types the
+fake provider uses. It needs `LLM_API_KEY` (free tier works) and defaults
+to the `gemini-flash-latest` alias so provider model retirements do not
+break it. `scripts/live_check.py` is the opt in proof that a real model
+flows through the gateway with `simulated=false`; it never runs in
+verify.sh or CI. Anthropic and OpenAI adapters would follow the same
+shape but have no free tier; an Ollama adapter for local models is the
+documented next free provider.
+
 ## Agents (deterministic orchestration, specialized calls)
 
 - **Conversation (Dira):** replies to patient messages with recent history

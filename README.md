@@ -137,11 +137,19 @@ docker compose --profile observability up -d
   timeout, and state transition is visible and tested. Frameworks like
   LangGraph solve real problems; here the point is demonstrating the
   mechanics they abstract.
-- **Fake first AI provider.** All development and CI run against a
-  deterministic, clearly labeled fake provider behind the same interface
-  as real adapters. Tests and evals are reproducible and free, and the
-  simulated flag flows from the provider through the audit log to a badge
-  on every AI element in the UI.
+- **Fake first AI provider, with a real adapter proving the seam.** All
+  development and CI run against a deterministic, clearly labeled fake
+  provider behind the same interface as real adapters. Tests and evals
+  are reproducible and free, and the simulated flag flows from the
+  provider through the audit log to a badge on every AI element in the
+  UI. A real Gemini adapter (plain httpx, free tier, `LLM_PROVIDER=gemini`
+  plus a key) plugs into the same gateway with tool calling, structured
+  output, and streaming; `uv run python -m scripts.live_check` is an opt
+  in script that proves a real reply, a validated risk classification,
+  and a stream all land in the audit trail with `simulated=false`. It is
+  never part of verify.sh or CI. Anthropic and OpenAI adapters would be
+  the same shape but have no free tier, so an Ollama adapter for local
+  models is the documented next provider.
 - **Two embedding providers, measured against each other.** The default
   is hashing based lexical embeddings (real retrieval, zero cost, no
   downloads); `EMBEDDING_PROVIDER=fastembed` switches to a local semantic

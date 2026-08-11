@@ -73,7 +73,7 @@ def test_factory_defaults_and_swap():
     register_provider("stub", Stub)
     assert create_provider("stub").name == "stub"
 
-    with pytest.raises(RuntimeError, match="not implemented yet"):
+    with pytest.raises(RuntimeError, match="not implemented"):
         create_provider("anthropic")
     with pytest.raises(RuntimeError, match="Unknown"):
         create_provider("nonsense")
