@@ -76,6 +76,66 @@ class ReviewDecisionResponse(BaseModel):
     decision: ReviewDecision
 
 
+class OpsWorkflowResponse(BaseModel):
+    id: UUID
+    workflow_type: str
+    state: str
+    subject_id: UUID
+    correlation_id: str | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class OpsTransitionResponse(BaseModel):
+    from_state: str | None
+    to_state: str
+    actor: str
+    reason: str
+    occurred_at: datetime
+
+
+class OpsWorkflowDetailResponse(BaseModel):
+    workflow: OpsWorkflowResponse
+    transitions: list[OpsTransitionResponse]
+
+
+class OpsAIRequestResponse(BaseModel):
+    id: UUID
+    provider: str
+    model: str
+    prompt_name: str
+    prompt_version: int
+    status: str
+    simulated: bool
+    validation_ok: bool | None
+    latency_ms: float
+    input_tokens: int
+    output_tokens: int
+    cost_usd: float
+    correlation_id: str | None
+    error_type: str | None
+    created_at: datetime
+
+
+class OpsAIRequestDetailResponse(OpsAIRequestResponse):
+    request_messages: list[dict]
+    response_text: str | None
+
+
+class OpsEventResponse(BaseModel):
+    id: UUID
+    event_type: str
+    schema_version: int
+    occurred_at: datetime
+    published_at: datetime | None
+    correlation_id: str | None
+
+
+class OpsDlqResponse(BaseModel):
+    topic: str
+    records: list[str]
+
+
 class MessageResponse(BaseModel):
     id: UUID
     conversation_id: UUID

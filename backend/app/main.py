@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.middleware import CorrelationIdMiddleware
 from app.api.problems import register_exception_handlers
-from app.api.routes import auth, conversations, health, reviews
+from app.api.routes import auth, conversations, health, ops, reviews
 from app.infrastructure.db import create_engine, create_session_factory
 from app.infrastructure.logging import configure_logging
 from app.infrastructure.settings import get_settings
@@ -47,6 +47,7 @@ def create_app() -> FastAPI:
     app.include_router(auth.router, prefix="/api/v1")
     app.include_router(conversations.router, prefix="/api/v1")
     app.include_router(reviews.router, prefix="/api/v1")
+    app.include_router(ops.router, prefix="/api/v1")
     return app
 
 

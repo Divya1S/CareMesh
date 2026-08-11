@@ -5,9 +5,15 @@
 
 ## Current phase
 
-**S6, risk signal and clinician review: COMPLETE. Gate passed on 2026-08-10.**
-Next phase is **S7: the minimal ops console, the eval runner with a golden
-dataset, and the Playwright E2E journey. S7 closes the vertical slice.**
+**S7: COMPLETE. THE VERTICAL SLICE S1 TO S7 IS DONE (2026-08-10).**
+Student, Dira, risk signal, clinician review, and ops console run end to
+end on one laptop at zero cost, with the full gate green: 69 backend tests,
+13 frontend tests, 7/7 evals, and the browser E2E journey.
+
+Next: the broadening phases from the proposal (section 11), in rough order:
+deep RAG (spec P6), richer Dira and clinician workspace, school and
+guardian surfaces (P9), payer workflows (P10), the observability compose
+profile, eval expansion, security hardening. Pick with the human.
 Phase 0 was approved by the human on 2026-08-10 and the approved plan is
 `docs/PHASE_0_PROPOSAL.md` (roadmap in section 11). All frontend work follows
 `docs/DESIGN.md` (added by the human; authoritative).
@@ -151,9 +157,31 @@ Phase 0 was approved by the human on 2026-08-10 and the approved plan is
     the frame transitioning to the rose approved state. Login now routes
     therapists to /clinician.
 
+- 2026-08-10, S7 ops console, evals, and the E2E journey, closing the slice.
+  Validated by `./scripts/verify.sh` (backend, frontend, and now evals) and
+  `./scripts/e2e.sh` (real browser journey with reviewed screenshots):
+  - Ops API under `/api/v1/ops` (ops_admin only, org scoped, tested):
+    workflows with full transition history and state filter, AI request
+    inspector (list plus detail with prompt messages and response), event
+    outbox listing, safe event republish (clears published_at; consumers
+    are idempotent so replays are safe, tested), and a DLQ viewer that
+    reads the dead letter topic with a throwaway consumer group.
+  - Ops console UI at `/ops`: dense light theme per DESIGN.md 4.7, status
+    chips, mono ids, expandable workflow history and AI request detail,
+    republish with a confirm dialog that explains idempotency, dead
+    letters section. Ops admins land there after login.
+  - Evals: `backend/evals/` golden dataset v1 (7 cases: normal, ambiguous,
+    safety, prompt injection, malformed output) runs the real gateway and
+    risk_signal prompt against the fake provider, checks classification
+    AND the deterministic escalation decision, writes results with model
+    and dataset versions, and fails verify.sh below 100 percent.
+  - E2E: `frontend/e2e/journey.mjs` plus `scripts/e2e.sh` boot the full
+    stack (API, relay, consumer, frontend), then drive student message,
+    Dira reply, therapist accept, and ops visibility in headless Chromium.
+
 ## In flight
 
-- Nothing. S6 closed cleanly, working tree committed.
+- Nothing. The slice is closed cleanly, working tree committed.
 
 ## Known limitations (intentional, coming in later phases)
 
@@ -167,21 +195,15 @@ Phase 0 was approved by the human on 2026-08-10 and the approved plan is
 - Chat refreshes messages on send only; live updates (polling or SSE) come
   with Dira in S5.
 
-## Next steps (S7, ops console and slice hardening)
+## Next steps (broadening, pick with the human)
 
-1. Ops console at /ops (ops_admin role): workflow list with state and
-   transition history, AI request inspector (prompt, response, tokens,
-   cost, latency, status), outbox and DLQ visibility, and a workflow retry
-   action for failed instances. Ops endpoints under /api/v1/ops with
-   ops_admin authorization; graphite theme optional per DESIGN.md 4.7.
-2. Eval runner under evals/: a golden dataset of conversation scenarios
-   (normal, ambiguous, safety sensitive, injection, malformed) run against
-   the fake provider through the real gateway, asserting risk
-   classification and escalation decisions; wired into verify.sh.
-3. Playwright E2E journey as a repeatable script: student message, Dira
-   reply, risk signal, therapist review, ops visibility.
-4. Gate: the full vertical slice runs end to end on one laptop, free, and
-   verify.sh covers backend, frontend, and evals.
+The proposal (section 11) sequences the rest as: deep RAG (spec P6),
+deeper Dira and clinician workspace (P5/P8), school and guardian surfaces
+(P9), payer workflows (P10), full ops and the observability compose
+profile (P11/P12), eval expansion (P13), security hardening (P14),
+performance (P15), deployment docs (P16), final review (P17). Reasonable
+defaults if the human just says continue: RAG next (it deepens Dira with
+grounded answers and citations), then school and guardian.
 
 ## Notes for the next session
 

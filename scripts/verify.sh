@@ -25,7 +25,7 @@ else
   echo "==> frontend: not present yet, skipped"
 fi
 
-if [ -d evals ]; then
+if [ -d backend/evals ]; then
   echo "==> evals: golden dataset"
   (cd backend && uv run python -m evals.run --dataset golden)
 else

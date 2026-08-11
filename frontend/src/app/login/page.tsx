@@ -21,7 +21,13 @@ export default function LoginPage() {
     try {
       await login(email, password);
       const me = await getMe();
-      router.replace(me.role === "therapist" ? "/clinician" : "/chat");
+      router.replace(
+        me.role === "therapist"
+          ? "/clinician"
+          : me.role === "ops_admin"
+            ? "/ops"
+            : "/chat",
+      );
     } catch (err) {
       setError(
         err instanceof ApiError && err.status === 401

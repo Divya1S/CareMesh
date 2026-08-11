@@ -12,6 +12,12 @@ export type Conversation = components["schemas"]["ConversationResponse"];
 export type Message = components["schemas"]["MessageResponse"];
 export type ReviewItem = components["schemas"]["ReviewQueueItemResponse"];
 export type ReviewDecision = components["schemas"]["ReviewDecision"];
+export type OpsWorkflow = components["schemas"]["OpsWorkflowResponse"];
+export type OpsWorkflowDetail = components["schemas"]["OpsWorkflowDetailResponse"];
+export type OpsAIRequest = components["schemas"]["OpsAIRequestResponse"];
+export type OpsAIRequestDetail = components["schemas"]["OpsAIRequestDetailResponse"];
+export type OpsEvent = components["schemas"]["OpsEventResponse"];
+export type OpsDlq = components["schemas"]["OpsDlqResponse"];
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -69,6 +75,7 @@ async function request<T>(
     return request<T>(path, init, false);
   }
   if (!response.ok) throw await parseProblem(response);
+  if (response.status === 204) return undefined as T;
   return response.json();
 }
 
@@ -97,6 +104,25 @@ export const listMessages = (conversationId: string) =>
   request<Message[]>(`/api/v1/conversations/${conversationId}/messages?limit=100`);
 
 export const listReviews = () => request<ReviewItem[]>("/api/v1/reviews");
+
+export const opsListWorkflows = () => request<OpsWorkflow[]>("/api/v1/ops/workflows");
+
+export const opsWorkflowDetail = (id: string) =>
+  request<OpsWorkflowDetail>(`/api/v1/ops/workflows/${id}`);
+
+export const opsListAIRequests = () =>
+  request<OpsAIRequest[]>("/api/v1/ops/ai-requests");
+
+export const opsAIRequestDetail = (id: string) =>
+  request<OpsAIRequestDetail>(`/api/v1/ops/ai-requests/${id}`);
+
+export const opsListEvents = () => request<OpsEvent[]>("/api/v1/ops/events");
+
+export const opsRepublishEvent = async (id: string): Promise<void> => {
+  await request<unknown>(`/api/v1/ops/events/${id}/republish`, { method: "POST" });
+};
+
+export const opsViewDlq = () => request<OpsDlq>("/api/v1/ops/dlq");
 
 export const decideReview = (
   workflowId: string,

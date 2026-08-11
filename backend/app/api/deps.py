@@ -11,14 +11,17 @@ from app.application.ai.gateway import AIGateway
 from app.application.errors import UnauthorizedError
 from app.application.use_cases.auth import AuthService
 from app.application.use_cases.conversations import ConversationService
+from app.application.use_cases.ops import OpsService
 from app.application.use_cases.reviews import ReviewService
 from app.domain.entities import User
 from app.infrastructure.ai.factory import create_provider
 from app.infrastructure.repositories import (
     SqlAIRequestLog,
+    SqlAIRequestQuery,
     SqlAuthSessionRepository,
     SqlCareAssignmentRepository,
     SqlConversationRepository,
+    SqlEventLogQuery,
     SqlEventOutbox,
     SqlMessageRepository,
     SqlRiskRepository,
@@ -109,6 +112,17 @@ def get_review_service(session: SessionDep) -> ReviewService:
 
 
 ReviewServiceDep = Annotated[ReviewService, Depends(get_review_service)]
+
+
+def get_ops_service(session: SessionDep) -> OpsService:
+    return OpsService(
+        workflows=SqlWorkflowRepository(session),
+        ai_requests=SqlAIRequestQuery(session),
+        events=SqlEventLogQuery(session),
+    )
+
+
+OpsServiceDep = Annotated[OpsService, Depends(get_ops_service)]
 
 
 async def get_current_user(request: Request, session: SessionDep, tokens: TokenServiceDep) -> User:

@@ -14,7 +14,8 @@ Honesty rules that must never be broken (repeated here because they carry weight
 
 ## Current state
 
-- **Phase:** S6, risk signal and clinician review, complete (gate passed 2026-08-10). Next: S7, the minimal ops console, the eval runner, and the Playwright E2E journey, which closes the vertical slice
+- **Phase:** S7 complete (gate passed 2026-08-10). **The vertical slice S1 to S7 is DONE**: Student, Dira, risk signal, clinician review, and ops console run end to end on one laptop, free. Next: the broadening phases from the proposal section 11 (deep RAG spec P6, richer Dira and workspace, school and guardian P9, payer P10, observability stack, eval expansion, security hardening)
+- **Ops console:** `/ops` (ops_admin): workflows with transition history, AI request inspector, event outbox with safe republish (idempotent consumers), DLQ viewer. Evals: `backend/evals/` golden dataset runs in verify.sh; E2E journey: `./scripts/e2e.sh`
 - **Risk flow:** the conversation consumer runs the Risk Signal agent (gateway, `risk_signal` v1) on patient messages; deterministic thresholds in `domain/risk.py` open a Risk Escalation workflow; therapists review at `/clinician` with accept, edit, or reject; everything is evented and the workflow history is append only
 - **Dira:** patient messages get a synchronous reply through the gateway (ADR 0005), persisted as a `dira` message with `ai_request_id` and `simulated` provenance columns, `AIResponseGenerated` emitted to the outbox, SIMULATED chip rendered in the chat
 - **AI:** all LLM calls go through `AIGateway` (`app/application/ai/gateway.py`): prompt registry with versions, structured output validation with bounded retry, timeout, and every call logged to `ai_requests` with the simulated flag. Provider chosen by `LLM_PROVIDER` env var; `fake` is the default (deterministic scenarios, `# SIMULATED`, injectable failures via `[[fail:timeout|malformed|error]]` markers)
@@ -37,12 +38,11 @@ Honesty rules that must never be broken (repeated here because they carry weight
 ## Repository layout
 
 ```
-backend/          FastAPI app (api/ application/ domain/ infrastructure/)
-frontend/         Next.js app
-docs/             BUILD_SPEC.md, PROGRESS.md, PHASE_0_PROPOSAL.md, ARCHITECTURE.md, adr/, ...
-docker/           compose files, service configs
-scripts/          dev + validation scripts
-evals/            golden datasets, evaluation runner
+backend/          FastAPI app (api/ application/ domain/ infrastructure/ workers/ evals/)
+frontend/         Next.js app (src/app src/components src/lib e2e/)
+docs/             BUILD_SPEC.md, PROGRESS.md, PHASE_0_PROPOSAL.md, DESIGN.md, EVENTS.md, adr/
+docker/           postgres init scripts (compose file lives at the repo root)
+scripts/          verify.sh (phase gate), e2e.sh (browser journey), gen-api-types.sh, seed via backend/scripts
 ```
 
 ## Commands

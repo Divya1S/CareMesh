@@ -18,7 +18,7 @@ from app.domain.entities import (
 from app.domain.events import DomainEvent
 from app.domain.ids import uuid7
 from app.domain.risk import RiskReview, RiskSignal
-from app.domain.workflows import WorkflowInstance, WorkflowType
+from app.domain.workflows import WorkflowInstance, WorkflowTransition, WorkflowType
 from app.infrastructure.models import (
     AIRequestRow,
     AuthSessionRow,
@@ -437,6 +437,51 @@ class SqlWorkflowRepository:
             )
         )
 
+    async def list_for_org(
+        self, organization_id: UUID, state: str | None, limit: int
+    ) -> list[WorkflowInstance]:
+        query = (
+            select(WorkflowInstanceRow)
+            .where(WorkflowInstanceRow.organization_id == organization_id)
+            .order_by(WorkflowInstanceRow.created_at.desc())
+            .limit(limit)
+        )
+        if state:
+            query = query.where(WorkflowInstanceRow.state == state)
+        rows = await self._session.scalars(query)
+        return [
+            WorkflowInstance(
+                id=r.id,
+                organization_id=r.organization_id,
+                workflow_type=r.workflow_type,
+                state=r.state,
+                subject_id=r.subject_id,
+                correlation_id=r.correlation_id,
+                created_at=r.created_at,
+                updated_at=r.updated_at,
+            )
+            for r in rows
+        ]
+
+    async def transitions_for(self, workflow_id: UUID) -> list[WorkflowTransition]:
+        rows = await self._session.scalars(
+            select(WorkflowTransitionRow)
+            .where(WorkflowTransitionRow.workflow_id == workflow_id)
+            .order_by(WorkflowTransitionRow.occurred_at.asc())
+        )
+        return [
+            WorkflowTransition(
+                id=r.id,
+                workflow_id=r.workflow_id,
+                from_state=r.from_state,
+                to_state=r.to_state,
+                actor=r.actor,
+                reason=r.reason,
+                occurred_at=r.occurred_at,
+            )
+            for r in rows
+        ]
+
     async def list_pending_risk(
         self, organization_id: UUID, patient_ids: list[UUID]
     ) -> list[tuple[WorkflowInstance, RiskSignal]]:
@@ -469,6 +514,57 @@ class SqlWorkflowRepository:
                 )
             )
         return result
+
+
+class SqlAIRequestQuery:
+    """Read side for the ops console AI request inspector."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def list_for_org(self, organization_id: UUID, limit: int) -> list[AIRequestRow]:
+        rows = await self._session.scalars(
+            select(AIRequestRow)
+            .where(AIRequestRow.organization_id == organization_id)
+            .order_by(AIRequestRow.id.desc())
+            .limit(limit)
+        )
+        return list(rows)
+
+    async def get_for_org(self, organization_id: UUID, request_id: UUID) -> AIRequestRow | None:
+        row = await self._session.get(AIRequestRow, request_id)
+        if row is None or row.organization_id != organization_id:
+            return None
+        return row
+
+
+class SqlEventLogQuery:
+    """Read side plus the republish action for the ops console."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def list_for_org(self, organization_id: UUID, limit: int) -> list[DomainEventLogRow]:
+        rows = await self._session.scalars(
+            select(DomainEventLogRow)
+            .where(DomainEventLogRow.organization_id == organization_id)
+            .order_by(DomainEventLogRow.id.desc())
+            .limit(limit)
+        )
+        return list(rows)
+
+    async def get_for_org(self, organization_id: UUID, event_id: UUID) -> DomainEventLogRow | None:
+        row = await self._session.get(DomainEventLogRow, event_id)
+        if row is None or row.organization_id != organization_id:
+            return None
+        return row
+
+    async def mark_unpublished(self, event_id: UUID) -> None:
+        await self._session.execute(
+            update(DomainEventLogRow)
+            .where(DomainEventLogRow.id == event_id)
+            .values(published_at=None)
+        )
 
 
 class SqlCareAssignmentRepository:

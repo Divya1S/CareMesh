@@ -35,3 +35,5 @@ npm-debug.log*
 *.db
 *.sqlite3
 docker/volumes/
+backend/evals/results/
+frontend/e2e/screenshots/
