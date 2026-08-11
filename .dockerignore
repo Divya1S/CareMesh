@@ -1,0 +1,15 @@
+# Keep the build context small and keep secrets out of images.
+# backend/.env holds the only real credential in the project; it must
+# never be copied into an image layer.
+**/.env
+**/.env.*
+!**/.env.example
+.git
+frontend/node_modules
+frontend/.next
+backend/.venv
+**/__pycache__
+**/.pytest_cache
+**/.ruff_cache
+backend/evals/results
+docs/images

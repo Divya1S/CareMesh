@@ -3,9 +3,9 @@
 # Default services (no profile): postgres, redis, redpanda.
 #   docker compose up -d
 # The API runs on the host during dev (cd backend && uv run uvicorn app.main:app).
-# A containerized API can be added under an "app" profile when a Dockerfile lands.
-# The observability profile (Prometheus, Grafana, OTel) arrives after the
-# vertical slice works, per the Phase 0 proposal, and stays off by default.
+# The app profile containerizes the backend (API, relay, consumer):
+#   docker compose --profile app up -d --build
+# The observability profile (Prometheus, Grafana) stays off by default.
 
 name: caremesh
 
@@ -63,6 +63,63 @@ services:
       interval: 5s
       timeout: 5s
       retries: 20
+
+  # Containerized backend (off by default; dev runs it on the host):
+  #   docker compose --profile app up -d --build
+  migrate:
+    build: &backend_build
+      context: .
+      dockerfile: docker/backend.Dockerfile
+    profiles: ["app"]
+    command: ["alembic", "upgrade", "head"]
+    environment: &backend_env
+      DATABASE_URL: postgresql+asyncpg://caremesh:caremesh_dev_password@postgres:5432/caremesh
+      REDIS_URL: redis://redis:6379/0
+      KAFKA_BOOTSTRAP_SERVERS: redpanda:9093
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api:
+    build: *backend_build
+    profiles: ["app"]
+    environment: *backend_env
+    ports:
+      - "${API_PORT:-8000}:8000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      redpanda:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/healthz')\""]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  relay:
+    build: *backend_build
+    profiles: ["app"]
+    command: ["python", "-m", "app.workers.relay"]
+    environment: *backend_env
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redpanda:
+        condition: service_healthy
+
+  consumer:
+    build: *backend_build
+    profiles: ["app"]
+    command: ["python", "-m", "app.workers.conversation_consumer"]
+    environment: *backend_env
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redpanda:
+        condition: service_healthy
 
   # Observability stack (spec P12). Off by default to spare the laptop:
   #   docker compose --profile observability up -d

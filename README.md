@@ -81,14 +81,21 @@ workflow, AI call, and event, including replaying events safely.
 
 | Metric | Value |
 |---|---|
-| Backend tests (unit + integration against real Postgres, Redis, Redpanda) | 105 |
+| Backend tests (unit + integration against real Postgres, Redis, Redpanda) | 114 |
 | Frontend tests | 13 |
 | Gated eval cases (risk, Dira safety and tool use, retrieval) | 23/23 |
 | Escalation precision / recall on the eval set | 1.0 / 1.0 |
 | Retrieval hit@1 / MRR: lexical embeddings (default) | 0.5 / 0.583 |
 | Retrieval hit@1 / MRR: semantic embeddings (fastembed, local) | 1.0 / 1.0 |
-| Total AI spend across all development | $0.00 |
+| Chat message with a generated Dira reply, p95 (containerized stack, fake provider) | 37ms |
+| Authenticated conversation list, p95 at concurrency 20 | 82ms |
+| Total AI spend across all development (including the live Gemini check) | $0.00 |
 | External paid services required | none |
+
+Latency numbers come from `scripts/loadtest.py` run against the
+containerized backend on a laptop; the script deliberately stays inside
+the platform's own rate limits (5 logins per minute, 20 AI requests per
+user per minute) because the limits are part of the system under test.
 
 The retrieval rows are the same suite run under both embedding providers;
 the paraphrase cases lexical misses and semantic finds, plus the per
@@ -222,6 +229,7 @@ paid observability (tracing spans across the event pipeline).
 | [docs/DATABASE.md](docs/DATABASE.md) | Schema and access patterns |
 | [docs/API.md](docs/API.md) | API conventions and surfaces |
 | [docs/LOCAL_DEVELOPMENT.md](docs/LOCAL_DEVELOPMENT.md) | Everything about running it |
+| [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | Paper cloud mapping, clearly never deployed |
 | [docs/DESIGN.md](docs/DESIGN.md) | The design system and its rules |
 | [docs/adr/](docs/adr/) | Architecture decision records |
 
