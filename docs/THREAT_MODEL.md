@@ -13,7 +13,8 @@ and sessions, the audit and event trails themselves.
 
 Six user roles with distinct surfaces; the API boundary (browser to
 FastAPI); the broker boundary (API and workers to Redpanda); the AI
-boundary (application to LLM provider through the gateway); the database.
+boundary (application to LLM provider through the gateway); the database;
+the MCP boundary (a local MCP client to the stdio MCP server).
 Every role to role boundary is enforced server side in the application
 layer.
 
@@ -32,6 +33,7 @@ layer.
 | Tampering with audit or event history | Both tables are append only by convention and code path | No cryptographic chaining; DB admin could rewrite |
 | Sensitive data in logs or metrics | No content in logs, id only event payloads, normalized metric labels, truncated DLQ previews; tested for metrics labels | — |
 | Denial of service | Rate limits on the expensive paths, bounded page sizes, timeouts on AI calls | No global request limiter or WAF |
+| MCP client overreach | stdio only (no network listener, inherits local user trust), an allow list of two read only tools, hard scope to one organization, counts and library excerpts only, never conversation content | No per tool authentication; acceptable because the transport is local and read only |
 
 ## Failure modes (safety analysis)
 

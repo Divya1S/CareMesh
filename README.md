@@ -28,6 +28,7 @@ an evaluation and observability layer that gates every change.
 |---|---|
 | **LLM app engineering** | A central AI Gateway (`backend/app/application/ai/gateway.py`): prompt registry with versions, structured output validation with bounded retry, timeouts, streamed replies over SSE, and full auditing of every call (model, prompt version, tokens, cost, latency, tool calls, outcome) |
 | **Agentic tool calling** | A bounded tool loop with allow listed, tenant scoped tools (ADR 0007): Dira searches the resource library (agentic RAG with citations) and files appointment requests as real workflows the care team acknowledges; crisis disclosures bypass tools, gated by evals |
+| **MCP server** | `backend/mcp_server/`: a stdio MCP server any MCP client (Claude Desktop, Claude Code) can connect to, exposing two allow listed read only tools scoped to one organization; tested through a real MCP client round trip |
 | **RAG that is real** | Versioned documents, paragraph chunking with overlap, embeddings in pgvector with an HNSW index, tenant scoped cosine search plus keyword rerank, grounded answers with visible cited vs retrieved sources, and a stored retrieval trail per question |
 | **Evals as a gate** | Three deterministic suites (risk classification with escalation precision and recall, Dira reply safety properties, retrieval hit@k and MRR), run in CI and locally, gated at 100 percent; results stored with model and dataset versions plus latency, token, and cost usage |
 | **AI safety architecture** | The model never decides: escalation is deterministic domain code over structured output; crisis paths route to human review; clinician accept, edit, and reject are explicit audited acts; prompt injection cases are regression tested |
@@ -129,6 +130,40 @@ One command gates everything (lint, migrations, tests, evals):
 # observability stack (off by default): Prometheus :9090, Grafana :3001
 docker compose --profile observability up -d
 ```
+
+## Connect Claude to CareMesh (MCP)
+
+The repo ships an MCP server (`backend/mcp_server/`) so an MCP client
+such as Claude Desktop or Claude Code can query the platform directly.
+It exposes two read only tools: `search_resources` (retrieval over the
+organization's resource library with citations, no generation) and
+`get_platform_stats` (operational counts only, never content or names).
+
+Claude Code:
+
+```bash
+claude mcp add caremesh -- uv --directory /path/to/CareMesh/backend run python -m mcp_server
+```
+
+Claude Desktop (`claude_desktop_config.json`):
+
+```json
+{
+  "mcpServers": {
+    "caremesh": {
+      "command": "uv",
+      "args": ["--directory", "/path/to/CareMesh/backend", "run", "python", "-m", "mcp_server"]
+    }
+  }
+}
+```
+
+It needs the dockerized Postgres running and the database seeded (see
+Quickstart). Security choices are deliberately narrow: stdio transport
+only (no network listener), an allow list of two read only tools, and a
+hard scope to one organization (`MCP_ORG_NAME`, defaulting to the seeded
+demo org), so cross tenant reads are impossible by construction. The
+integration test drives the server through a real MCP client round trip.
 
 ## Deliberate choices (and the interview stories behind them)
 
