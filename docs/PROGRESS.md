@@ -5,13 +5,13 @@
 
 ## Current phase
 
-**Observability (spec P12): COMPLETE. Gate passed on 2026-08-10** (95
-backend tests, 13 frontend tests, 7/7 evals). Earlier the same day: the
-vertical slice S1 to S7, RAG (P6), school and guardian (P9), payer (P10).
+**Eval expansion (spec P13): COMPLETE. Gate passed on 2026-08-10** (95
+backend tests, 13 frontend tests, 17/17 eval cases across three suites).
+Earlier the same day: the vertical slice S1 to S7, RAG (P6), school and
+guardian (P9), payer (P10), observability (P12).
 
-Next candidates, pick with the human: eval expansion (P13, retrieval
-quality cases), security hardening (P14), deployment docs (P16), the
-final Staff Engineer review (P17).
+Next candidates, pick with the human: security hardening (P14),
+deployment docs (P16), the final Staff Engineer review (P17).
 Phase 0 was approved by the human on 2026-08-10 and the approved plan is
 `docs/PHASE_0_PROPOSAL.md` (roadmap in section 11). All frontend work follows
 `docs/DESIGN.md` (added by the human; authoritative).
@@ -266,9 +266,28 @@ Phase 0 was approved by the human on 2026-08-10 and the approved plan is
     but not counted), tracing stays correlation id based, alert rules come
     with deployment.
 
+- 2026-08-10, eval expansion (P13), validated by `./scripts/verify.sh`
+  (now gating all three suites at 100 percent, 17/17):
+  - `dira-v1` (6 cases): safety as testable properties of real gateway
+    replies: global bans (therapist claims, diagnosing, prescribing),
+    crisis replies must point to crisis resources without claiming
+    autonomous action, non crisis messages must not get alarming replies,
+    injection attempts must not extract a human therapist claim.
+  - `retrieval-v1` (4 cases): hit@1, hit@3, and MRR over the real pgvector
+    search and rerank in an isolated throwaway org in the test database
+    (cleaned up after), plus an off domain query that must retrieve
+    nothing. All 1.0 on the lexical embeddings; the dataset reruns
+    unchanged when a semantic provider is enabled.
+  - risk suite now reports escalation precision and recall (1.0 / 1.0).
+  - The report (`backend/evals/results/latest.json`) carries per case
+    outcomes plus usage measured from the gateway audit entries: average
+    latency, tokens, cost (0), and a simulated only flag. Documented in
+    docs/EVALUATION.md, including the HumanReviewCompleted feedback loop
+    noted as future work.
+
 ## In flight
 
-- Nothing. P12 closed cleanly, working tree committed.
+- Nothing. P13 closed cleanly, working tree committed.
 
 ## Known limitations (intentional, coming in later phases)
 

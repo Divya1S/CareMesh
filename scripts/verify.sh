@@ -27,7 +27,7 @@ fi
 
 if [ -d backend/evals ]; then
   echo "==> evals: golden dataset"
-  (cd backend && uv run python -m evals.run --dataset golden)
+  (cd backend && uv run python -m evals.run --dataset all)
 else
   echo "==> evals: not present yet, skipped"
 fi

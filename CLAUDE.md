@@ -14,7 +14,8 @@ Honesty rules that must never be broken (repeated here because they carry weight
 
 ## Current state
 
-- **Phase:** observability (spec P12) complete (gate passed 2026-08-10). Next candidates: eval expansion (P13), security hardening (P14), deployment docs (P16), final Staff Engineer review (P17)
+- **Phase:** eval expansion (spec P13) complete (gate passed 2026-08-10). Next candidates: security hardening (P14), deployment docs (P16), final Staff Engineer review (P17)
+- **Evals:** three suites in `backend/evals/` (risk golden-v1 with escalation precision and recall, dira-v1 safety property checks, retrieval-v1 hit@k and MRR over real pgvector in a throwaway org), all gated at 100 percent in verify.sh via `--dataset all`. See `docs/EVALUATION.md`
 - **Observability:** `/metrics` on the API (HTTP, AI, workflow, outbox metrics; DB backed gauges refresh every 15s), Prometheus + Grafana provisioned dashboard behind `docker compose --profile observability up -d`. See `docs/OBSERVABILITY.md` for the catalog and what is deferred (worker metrics, tracing, alerting)
 - **P10:** eligibility checks go through the labeled `fake-payer-1` adapter (`# SIMULATED`, `app/infrastructure/payer/`); therapists submit claims for assigned patients at `/billing` (requires a passing check); payer staff review at `/payer` with required denial reasons, resubmission, and the full transition history rail. Claim states: submitted, approved, denied, resubmitted. Demo account payer@demo.caremesh.org
 - **P9:** school staff see a names only roster and submit referrals (real workflow: submitted, accepted, declined); accepting assigns the therapist and notifies linked guardians. Guardians see only explicitly shared items (guardian_links gates everything): care updates written for them, notifications, resources. Surfaces at `/school` and `/guardian`; demo accounts school@ and guardian@demo.caremesh.org
@@ -71,7 +72,7 @@ npm run lint && npm run typecheck
 npm run test
 
 # Evals
-uv run python -m evals.run --dataset golden
+uv run python -m evals.run --dataset all
 
 # Phase exit check (run before declaring any phase complete)
 ./scripts/verify.sh
