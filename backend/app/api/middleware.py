@@ -24,6 +24,9 @@ class CorrelationIdMiddleware:
         request_id = headers.get(b"x-request-id", b"").decode() or str(uuid7())
         structlog.contextvars.clear_contextvars()
         structlog.contextvars.bind_contextvars(request_id=request_id)
+        # Exposed as request.state.request_id so use cases can carry it as a
+        # correlation id into domain events.
+        scope.setdefault("state", {})["request_id"] = request_id
         started = time.perf_counter()
         status_holder = {"status": 0}
 

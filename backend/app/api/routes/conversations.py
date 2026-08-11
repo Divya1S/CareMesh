@@ -2,7 +2,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Query
 
-from app.api.deps import ConversationServiceDep, CurrentUserDep
+from app.api.deps import ConversationServiceDep, CorrelationIdDep, CurrentUserDep
 from app.api.schemas import (
     ConversationCreateRequest,
     ConversationResponse,
@@ -76,5 +76,6 @@ async def post_message(
     body: MessageCreateRequest,
     user: CurrentUserDep,
     service: ConversationServiceDep,
+    correlation_id: CorrelationIdDep,
 ) -> MessageResponse:
-    return _message(await service.post_message(user, conversation_id, body.content))
+    return _message(await service.post_message(user, conversation_id, body.content, correlation_id))

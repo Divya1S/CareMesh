@@ -58,7 +58,7 @@ async def app(migrated):
         await conn.execute(
             text(
                 "TRUNCATE organizations, users, auth_sessions, conversations, "
-                "messages, care_assignments CASCADE"
+                "messages, care_assignments, domain_event_log, processed_events CASCADE"
             )
         )
     await engine.dispose()

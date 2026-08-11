@@ -12,7 +12,9 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    text,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -95,6 +97,39 @@ class MessageRow(Base):
     sender_id: Mapped[UUID | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     content: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = _created_at()
+
+
+class DomainEventLogRow(Base):
+    """Transactional outbox (ADR 0003). Append only; rows are never deleted."""
+
+    __tablename__ = "domain_event_log"
+    __table_args__ = (
+        Index(
+            "ix_domain_event_log_unpublished",
+            "id",
+            postgresql_where=text("published_at IS NULL"),
+        ),
+    )
+
+    id: Mapped[UUID] = _uuid_pk()
+    event_type: Mapped[str] = mapped_column(String(100), nullable=False)
+    schema_version: Mapped[int] = mapped_column(nullable=False)
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    organization_id: Mapped[UUID] = mapped_column(ForeignKey("organizations.id"), nullable=False)
+    correlation_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    causation_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    payload: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class ProcessedEventRow(Base):
+    """Consumer idempotency ledger: at least once delivery, exactly once effect."""
+
+    __tablename__ = "processed_events"
+
+    consumer_group: Mapped[str] = mapped_column(String(100), primary_key=True)
+    event_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True)
+    processed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
 class CareAssignmentRow(Base):

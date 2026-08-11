@@ -12,6 +12,7 @@ from app.domain.entities import (
     Organization,
     User,
 )
+from app.domain.events import DomainEvent
 
 
 class UserRepository(Protocol):
@@ -56,6 +57,12 @@ class CareAssignmentRepository(Protocol):
     async def patient_ids_for_therapist(
         self, organization_id: UUID, therapist_id: UUID
     ) -> list[UUID]: ...
+
+
+class EventOutbox(Protocol):
+    """Writes domain events in the caller's transaction (ADR 0003)."""
+
+    async def add(self, event: DomainEvent) -> None: ...
 
 
 class PasswordHasher(Protocol):

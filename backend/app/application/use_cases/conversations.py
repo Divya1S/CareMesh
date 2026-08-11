@@ -8,9 +8,11 @@ from app.application.errors import NotFoundError
 from app.application.ports import (
     CareAssignmentRepository,
     ConversationRepository,
+    EventOutbox,
     MessageRepository,
 )
 from app.domain.entities import Conversation, Message, Role, SenderType, User
+from app.domain.events import patient_message_created
 from app.domain.ids import uuid7
 
 MAX_PAGE_SIZE = 100
@@ -26,10 +28,12 @@ class ConversationService:
         conversations: ConversationRepository,
         messages: MessageRepository,
         assignments: CareAssignmentRepository,
+        outbox: EventOutbox,
     ) -> None:
         self._conversations = conversations
         self._messages = messages
         self._assignments = assignments
+        self._outbox = outbox
 
     async def create_conversation(self, actor: User, title: str) -> Conversation:
         authz.ensure_can_create_conversation(actor)
@@ -74,7 +78,13 @@ class ConversationService:
         limit, offset = _clamp_page(limit, offset)
         return await self._messages.list_for_conversation(conversation_id, limit, offset)
 
-    async def post_message(self, actor: User, conversation_id: UUID, content: str) -> Message:
+    async def post_message(
+        self,
+        actor: User,
+        conversation_id: UUID,
+        content: str,
+        correlation_id: str | None = None,
+    ) -> Message:
         conversation = await self._conversations.get_by_id(conversation_id)
         if conversation is None:
             raise NotFoundError("Conversation not found")
@@ -91,6 +101,19 @@ class ConversationService:
             created_at=datetime.now(UTC),
         )
         await self._messages.add(message)
+        # Same transaction as the message write: the outbox relay publishes
+        # this to the broker (ADR 0003), so there is no dual write.
+        await self._outbox.add(
+            patient_message_created(
+                message_id=message.id,
+                conversation_id=conversation.id,
+                patient_id=conversation.patient_id,
+                sender_type=message.sender_type.value,
+                organization_id=conversation.organization_id,
+                occurred_at=message.created_at,
+                correlation_id=correlation_id,
+            )
+        )
         return message
 
     async def _therapist_assigned(self, actor: User, conversation: Conversation) -> bool:

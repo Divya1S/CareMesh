@@ -14,10 +14,12 @@ from app.domain.entities import (
     Organization,
     User,
 )
+from app.domain.events import DomainEvent
 from app.infrastructure.models import (
     AuthSessionRow,
     CareAssignmentRow,
     ConversationRow,
+    DomainEventLogRow,
     MessageRow,
     OrganizationRow,
     UserRow,
@@ -219,6 +221,26 @@ class SqlMessageRepository:
             .offset(offset)
         )
         return [_message(r) for r in rows]
+
+
+class SqlEventOutbox:
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def add(self, event: DomainEvent) -> None:
+        self._session.add(
+            DomainEventLogRow(
+                id=event.event_id,
+                event_type=event.event_type,
+                schema_version=event.schema_version,
+                occurred_at=event.occurred_at,
+                organization_id=event.organization_id,
+                correlation_id=event.correlation_id,
+                causation_id=event.causation_id,
+                payload=event.payload,
+                published_at=None,
+            )
+        )
 
 
 class SqlCareAssignmentRepository:

@@ -21,6 +21,12 @@ class Settings(BaseSettings):
 
     cors_origins: list[str] = ["http://localhost:3000"]
 
+    kafka_bootstrap_servers: str = "localhost:9092"
+    kafka_topic_prefix: str = "caremesh"
+    relay_poll_seconds: float = 0.5
+    relay_batch_size: int = 100
+    consumer_max_attempts: int = 3
+
     # The dev default is intentionally not a secret. Anything but dev fails
     # closed at startup if this value is still in place.
     jwt_secret: str = "dev-only-not-a-secret"

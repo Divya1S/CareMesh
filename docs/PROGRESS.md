@@ -5,8 +5,8 @@
 
 ## Current phase
 
-**S2, student app: COMPLETE. Gate passed on 2026-08-10.** Next phase is
-**S3: events online (outbox table, relay, Redpanda consumer worker, DLQ).**
+**S3, events online: COMPLETE. Gate passed on 2026-08-10.** Next phase is
+**S4: the AI Gateway with the fake provider as the default.**
 Phase 0 was approved by the human on 2026-08-10 and the approved plan is
 `docs/PHASE_0_PROPOSAL.md` (roadmap in section 11). All frontend work follows
 `docs/DESIGN.md` (added by the human; authoritative).
@@ -63,9 +63,28 @@ Phase 0 was approved by the human on 2026-08-10 and the approved plan is
     typecheck, and tests. Playwright installed (dev dep) for smoke and later
     real E2E.
 
+- 2026-08-10, S3 events online, validated by `./scripts/verify.sh` (36 backend
+  tests green) and a live three process demo (API + relay + consumer: one
+  request's correlation id observed across the outbox row, the relay publish
+  log, and the consumer processed log):
+  - Outbox `domain_event_log` and idempotency ledger `processed_events`
+    (migration `cf719708a06e`). `PatientMessageCreated` v1 is written in the
+    same transaction as the message insert; payloads carry ids only, never
+    content. Documented in `docs/EVENTS.md`.
+  - Relay worker (`app.workers.relay`): FOR UPDATE SKIP LOCKED batches,
+    publishes to `caremesh.conversation.patient_message_created` keyed by
+    organization id, marks `published_at`.
+  - Consumer worker (`app.workers.conversation_consumer`, group
+    `caremesh-conversation-worker`): envelope validation, exactly once
+    effect via `processed_events`, bounded retries with backoff, dead
+    letters to `<topic>.dlq`. S6 plugs risk analysis into this skeleton.
+  - Integration tests cover: outbox written transactionally with the request
+    correlation id, relay publish and mark, consumer idempotency
+    (processed then duplicate), and a poison message landing on the DLQ.
+
 ## In flight
 
-- Nothing. S2 closed cleanly, working tree committed.
+- Nothing. S3 closed cleanly, working tree committed.
 
 ## Known limitations (intentional, coming in later phases)
 
@@ -79,19 +98,26 @@ Phase 0 was approved by the human on 2026-08-10 and the approved plan is
 - Chat refreshes messages on send only; live updates (polling or SSE) come
   with Dira in S5.
 
-## Next steps (S3, events online)
+## Next steps (S4, AI Gateway)
 
-1. `DomainEventLog` outbox table plus migration (envelope: event id, type,
-   schema version, occurred at, correlation and causation ids, tenant id,
-   payload, published at).
-2. Emit `PatientMessageCreated` in the same transaction as message writes.
-3. Relay process publishing outbox rows to Redpanda
-   (`caremesh.conversation.patient_message_created`), aiokafka producer.
-4. Worker consumer with idempotency (processed events table), bounded
-   retries, and a dead letter topic; runs as a separate compose process.
-5. Tests: outbox write is transactional, relay publishes, consumer is
-   idempotent, poison messages land in the DLQ. Gate: event flow
-   demonstrable end to end, failure and replay paths tested.
+1. `LLMProvider` protocol in the application layer; `FakeLLMProvider`
+   (deterministic, scenario driven, `# SIMULATED`, injectable failures) as
+   the default via `LLM_PROVIDER=fake` (ADR 0002).
+2. Prompt registry with versioned prompts; structured output validation with
+   bounded retry then typed error.
+3. `AIRequest` / `AIResponse` tables and full request logging: model,
+   provider, prompt version, tokens, cost, latency, validation result,
+   simulated flag, correlation id.
+4. A stub adapter test proving the env var provider swap (no real API calls,
+   no keys, still zero cost).
+5. Gate: gateway calls logged, validated, and labeled simulated end to end.
+
+## Notes for the next session
+
+- Dev workers run on the host (relay, conversation consumer commands are in
+  CLAUDE.md). Containerizing api plus workers behind a compose profile is
+  deferred to the hardening phases; the proposal wanted compose processes,
+  and this deviation is recorded here on purpose.
 
 ## Standing constraints from the human (2026-08-10)
 

@@ -1,0 +1,55 @@
+"""Domain events. Plain dataclasses, zero framework imports.
+
+Events are PascalCase facts in the past tense. Payloads carry ids, not
+clinical text: consumers that need content fetch it from the source of
+truth, which keeps message bodies out of broker logs and dead letters.
+"""
+
+from dataclasses import dataclass, field
+from datetime import datetime
+from uuid import UUID
+
+from app.domain.ids import uuid7
+
+
+@dataclass(frozen=True, slots=True)
+class DomainEvent:
+    """Envelope for one fact, written to the outbox in the same transaction
+    as the state change it describes."""
+
+    event_type: str
+    schema_version: int
+    occurred_at: datetime
+    organization_id: UUID
+    payload: dict
+    correlation_id: str | None = None
+    causation_id: str | None = None
+    event_id: UUID = field(default_factory=uuid7)
+
+
+PATIENT_MESSAGE_CREATED = "PatientMessageCreated"
+
+
+def patient_message_created(
+    *,
+    message_id: UUID,
+    conversation_id: UUID,
+    patient_id: UUID,
+    sender_type: str,
+    organization_id: UUID,
+    occurred_at: datetime,
+    correlation_id: str | None,
+) -> DomainEvent:
+    return DomainEvent(
+        event_type=PATIENT_MESSAGE_CREATED,
+        schema_version=1,
+        occurred_at=occurred_at,
+        organization_id=organization_id,
+        correlation_id=correlation_id,
+        payload={
+            "message_id": str(message_id),
+            "conversation_id": str(conversation_id),
+            "patient_id": str(patient_id),
+            "sender_type": sender_type,
+        },
+    )

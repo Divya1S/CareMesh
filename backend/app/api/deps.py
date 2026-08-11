@@ -15,6 +15,7 @@ from app.infrastructure.repositories import (
     SqlAuthSessionRepository,
     SqlCareAssignmentRepository,
     SqlConversationRepository,
+    SqlEventOutbox,
     SqlMessageRepository,
     SqlUserRepository,
 )
@@ -67,7 +68,15 @@ def get_conversation_service(session: SessionDep) -> ConversationService:
         conversations=SqlConversationRepository(session),
         messages=SqlMessageRepository(session),
         assignments=SqlCareAssignmentRepository(session),
+        outbox=SqlEventOutbox(session),
     )
+
+
+def get_correlation_id(request: Request) -> str | None:
+    return getattr(request.state, "request_id", None)
+
+
+CorrelationIdDep = Annotated[str | None, Depends(get_correlation_id)]
 
 
 async def get_current_user(request: Request, session: SessionDep, tokens: TokenServiceDep) -> User:
