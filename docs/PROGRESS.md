@@ -5,13 +5,18 @@
 
 ## Current phase
 
-**Security hardening (spec P14): COMPLETE. Gate passed on 2026-08-10**
-(101 backend tests, 13 frontend tests, 17/17 eval cases). Earlier the
-same day: the vertical slice S1 to S7, RAG (P6), school and guardian
-(P9), payer (P10), observability (P12), eval expansion (P13).
+**Hiring upgrade plan (approved 2026-08-10), phase H1 (README, docs, CI)
+in progress.** The plan lives in the session plan file and here: H1 docs
+and CI, H2 agentic Dira (tool calling plus SSE streaming), H3 semantic
+embeddings (fastembed, approved ~90MB download) with a lexical vs
+semantic eval comparison, H4 real Gemini and Anthropic adapters (user
+will create a free Gemini key when asked), H5 an MCP server exposing
+CareMesh tools, H6 Dockerfiles, deployment docs, load numbers, and the
+final Staff Engineer review (P17).
 
-Next candidates, pick with the human: deployment docs (P16), the final
-Staff Engineer review (P17).
+All spec phases through security hardening (P14) are complete: the
+vertical slice S1 to S7, RAG (P6), school and guardian (P9), payer
+(P10), observability (P12), eval expansion (P13), security (P14).
 Phase 0 was approved by the human on 2026-08-10 and the approved plan is
 `docs/PHASE_0_PROPOSAL.md` (roadmap in section 11). All frontend work follows
 `docs/DESIGN.md` (added by the human; authoritative).
