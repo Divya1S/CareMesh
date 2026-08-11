@@ -278,10 +278,81 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/knowledge/documents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Documents */
+        get: operations["list_documents_api_v1_knowledge_documents_get"];
+        put?: never;
+        /** Ingest Document */
+        post: operations["ingest_document_api_v1_knowledge_documents_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/knowledge/ask": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Ask */
+        post: operations["ask_api_v1_knowledge_ask_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AskRequest */
+        AskRequest: {
+            /** Question */
+            question: string;
+        };
+        /** AskResponse */
+        AskResponse: {
+            /** Answer */
+            answer: string;
+            /** Grounded */
+            grounded: boolean;
+            /** Simulated */
+            simulated: boolean | null;
+            /** Model */
+            model: string | null;
+            /** Citations */
+            citations: components["schemas"]["CitationResponse"][];
+        };
+        /** CitationResponse */
+        CitationResponse: {
+            /**
+             * Chunk Id
+             * Format: uuid
+             */
+            chunk_id: string;
+            /** Document Title */
+            document_title: string;
+            /** Document Version */
+            document_version: number;
+            /** Snippet */
+            snippet: string;
+            /** Score */
+            score: number;
+            /** Used */
+            used: boolean;
+        };
         /** ConversationCreateRequest */
         ConversationCreateRequest: {
             /** Title */
@@ -307,10 +378,46 @@ export interface components {
              */
             created_at: string;
         };
+        /** DocumentIngestRequest */
+        DocumentIngestRequest: {
+            /** Title */
+            title: string;
+            /** Source Name */
+            source_name: string;
+            /** Content */
+            content: string;
+        };
+        /** DocumentIngestResponse */
+        DocumentIngestResponse: {
+            document: components["schemas"]["KnowledgeDocumentResponse"];
+            /** Chunk Count */
+            chunk_count: number;
+            /** Unchanged */
+            unchanged: boolean;
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /** KnowledgeDocumentResponse */
+        KnowledgeDocumentResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Title */
+            title: string;
+            /** Source Name */
+            source_name: string;
+            /** Version */
+            version: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
         };
         /** LoginRequest */
         LoginRequest: {
@@ -1180,6 +1287,92 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["OpsDlqResponse"];
+                };
+            };
+        };
+    };
+    list_documents_api_v1_knowledge_documents_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgeDocumentResponse"][];
+                };
+            };
+        };
+    };
+    ingest_document_api_v1_knowledge_documents_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DocumentIngestRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocumentIngestResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    ask_api_v1_knowledge_ask_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AskRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AskResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

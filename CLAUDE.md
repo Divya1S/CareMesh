@@ -14,7 +14,8 @@ Honesty rules that must never be broken (repeated here because they carry weight
 
 ## Current state
 
-- **Phase:** S7 complete (gate passed 2026-08-10). **The vertical slice S1 to S7 is DONE**: Student, Dira, risk signal, clinician review, and ops console run end to end on one laptop, free. Next: the broadening phases from the proposal section 11 (deep RAG spec P6, richer Dira and workspace, school and guardian P9, payer P10, observability stack, eval expansion, security hardening)
+- **Phase:** RAG (spec P6) complete (gate passed 2026-08-10), after the vertical slice S1 to S7. Next broadening candidates: school and guardian surfaces (P9), payer (P10), observability stack, eval expansion, security hardening
+- **RAG:** real pipeline (ADR 0006): versioned documents chunked and embedded (local lexical hashing, EMBEDDING_PROVIDER env var) into pgvector, tenant scoped cosine search plus keyword rerank, grounded answers with citations through the `knowledge_answer` prompt, retrieval trail in `rag_retrievals`. API under `/api/v1/knowledge`; student surface at `/resources`; ingestion is ops_admin only
 - **Ops console:** `/ops` (ops_admin): workflows with transition history, AI request inspector, event outbox with safe republish (idempotent consumers), DLQ viewer. Evals: `backend/evals/` golden dataset runs in verify.sh; E2E journey: `./scripts/e2e.sh`
 - **Risk flow:** the conversation consumer runs the Risk Signal agent (gateway, `risk_signal` v1) on patient messages; deterministic thresholds in `domain/risk.py` open a Risk Escalation workflow; therapists review at `/clinician` with accept, edit, or reject; everything is evented and the workflow history is append only
 - **Dira:** patient messages get a synchronous reply through the gateway (ADR 0005), persisted as a `dira` message with `ai_request_id` and `simulated` provenance columns, `AIResponseGenerated` emitted to the outbox, SIMULATED chip rendered in the chat
@@ -91,6 +92,8 @@ uv run python -m evals.run --dataset golden
 - pydantic EmailStr (email-validator) rejects reserved TLDs such as .test and .local. Demo and test accounts use @something.caremesh.org addresses.
 - The ORM models define no relationship() mappings, so SQLAlchemy does not order inserts across tables for foreign keys in one flush. When seeding related rows in one session, flush per dependency level (see tests/conftest.py).
 - The docker/postgres/init scripts (test database creation) only run on first container start. If the postgres volume predates a new init script, create the database manually or remove the volume.
+- Postgres runs the pgvector/pgvector:pg16 image (RAG, ADR 0006). The swap from alpine required one dev volume reset; if the volume ever predates the swap, drop it and reseed.
+- The ORM has no relationship() mappings, so parent rows must be flushed before children insert in the same transaction (documents before chunks, organizations before users). See tests/conftest.py and SqlDocumentRepository.add.
 
 ## Session protocol
 

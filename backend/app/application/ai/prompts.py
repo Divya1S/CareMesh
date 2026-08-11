@@ -47,6 +47,23 @@ register(
 
 register(
     Prompt(
+        name="knowledge_answer",
+        version=1,
+        description="Grounded answer over retrieved resource chunks, with citations.",
+        system=(
+            "You answer questions using ONLY the numbered sources provided in "
+            "the user message. Quote or closely paraphrase the sources; never "
+            "add outside knowledge. If the sources do not cover the question, "
+            "say so plainly. Output JSON matching the given schema: answer, "
+            "and cited_chunk_ids listing the id of every source you actually "
+            "used. You are part of a support tool, not a clinician; never "
+            "give medical advice beyond what the sources say."
+        ),
+    )
+)
+
+register(
+    Prompt(
         name="risk_signal",
         version=1,
         description="Structured risk signal extraction from one patient message.",

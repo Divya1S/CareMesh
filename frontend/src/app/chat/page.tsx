@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
@@ -124,6 +125,14 @@ export default function ChatPage() {
               >
                 Chat
               </span>
+            ) : item === "Resources" ? (
+              <Link
+                key={item}
+                href="/resources"
+                className="rounded-control px-3 py-2 text-ink hover:bg-primary-soft/50"
+              >
+                Resources
+              </Link>
             ) : (
               <span
                 key={item}

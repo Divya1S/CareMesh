@@ -3,6 +3,7 @@
 from datetime import datetime
 from uuid import UUID
 
+from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     Boolean,
     DateTime,
@@ -19,8 +20,11 @@ from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 from app.domain.entities import Role, SenderType
+from app.domain.knowledge import DocumentStatus
 from app.domain.risk import ReviewDecision, RiskCategory
 from app.domain.workflows import WorkflowType
+
+EMBEDDING_DIM = 384
 
 
 class Base(DeclarativeBase):
@@ -233,6 +237,53 @@ class WorkflowTransitionRow(Base):
     actor: Mapped[str] = mapped_column(String(64), nullable=False)
     reason: Mapped[str] = mapped_column(String(300), nullable=False)
     occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class DocumentRow(Base):
+    __tablename__ = "documents"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id", "source_name", "version", name="uq_document_source_version"
+        ),
+    )
+
+    id: Mapped[UUID] = _uuid_pk()
+    organization_id: Mapped[UUID] = mapped_column(ForeignKey("organizations.id"), nullable=False)
+    title: Mapped[str] = mapped_column(String(300), nullable=False)
+    source_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    version: Mapped[int] = mapped_column(nullable=False)
+    status: Mapped[DocumentStatus] = mapped_column(
+        Enum(DocumentStatus, name="document_status"), nullable=False
+    )
+    content_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = _created_at()
+
+
+class DocumentChunkRow(Base):
+    __tablename__ = "document_chunks"
+    __table_args__ = (Index("ix_document_chunks_org", "organization_id"),)
+
+    id: Mapped[UUID] = _uuid_pk()
+    document_id: Mapped[UUID] = mapped_column(ForeignKey("documents.id"), nullable=False)
+    organization_id: Mapped[UUID] = mapped_column(ForeignKey("organizations.id"), nullable=False)
+    chunk_index: Mapped[int] = mapped_column(nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    embedding: Mapped[list[float]] = mapped_column(Vector(EMBEDDING_DIM), nullable=False)
+    created_at: Mapped[datetime] = _created_at()
+
+
+class RagRetrievalRow(Base):
+    """What was retrieved for one question, and what the answer cited.
+    Append only; the groundedness audit trail."""
+
+    __tablename__ = "rag_retrievals"
+
+    id: Mapped[UUID] = _uuid_pk()
+    organization_id: Mapped[UUID] = mapped_column(ForeignKey("organizations.id"), nullable=False)
+    question: Mapped[str] = mapped_column(Text, nullable=False)
+    ai_request_id: Mapped[UUID | None] = mapped_column(ForeignKey("ai_requests.id"), nullable=True)
+    retrieved: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    created_at: Mapped[datetime] = _created_at()
 
 
 class CareAssignmentRow(Base):

@@ -18,6 +18,8 @@ export type OpsAIRequest = components["schemas"]["OpsAIRequestResponse"];
 export type OpsAIRequestDetail = components["schemas"]["OpsAIRequestDetailResponse"];
 export type OpsEvent = components["schemas"]["OpsEventResponse"];
 export type OpsDlq = components["schemas"]["OpsDlqResponse"];
+export type KnowledgeDocument = components["schemas"]["KnowledgeDocumentResponse"];
+export type KnowledgeAnswer = components["schemas"]["AskResponse"];
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -123,6 +125,15 @@ export const opsRepublishEvent = async (id: string): Promise<void> => {
 };
 
 export const opsViewDlq = () => request<OpsDlq>("/api/v1/ops/dlq");
+
+export const listKnowledgeDocuments = () =>
+  request<KnowledgeDocument[]>("/api/v1/knowledge/documents");
+
+export const askKnowledge = (question: string) =>
+  request<KnowledgeAnswer>("/api/v1/knowledge/ask", {
+    method: "POST",
+    body: JSON.stringify({ question }),
+  });
 
 export const decideReview = (
   workflowId: string,

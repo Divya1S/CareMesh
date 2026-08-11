@@ -11,19 +11,24 @@ from app.application.ai.gateway import AIGateway
 from app.application.errors import UnauthorizedError
 from app.application.use_cases.auth import AuthService
 from app.application.use_cases.conversations import ConversationService
+from app.application.use_cases.knowledge import KnowledgeService
 from app.application.use_cases.ops import OpsService
 from app.application.use_cases.reviews import ReviewService
 from app.domain.entities import User
+from app.infrastructure.ai.embeddings import create_embedding_provider
 from app.infrastructure.ai.factory import create_provider
 from app.infrastructure.repositories import (
     SqlAIRequestLog,
     SqlAIRequestQuery,
     SqlAuthSessionRepository,
     SqlCareAssignmentRepository,
+    SqlChunkRepository,
     SqlConversationRepository,
+    SqlDocumentRepository,
     SqlEventLogQuery,
     SqlEventOutbox,
     SqlMessageRepository,
+    SqlRagRetrievalRepository,
     SqlRiskRepository,
     SqlUserRepository,
     SqlWorkflowRepository,
@@ -123,6 +128,21 @@ def get_ops_service(session: SessionDep) -> OpsService:
 
 
 OpsServiceDep = Annotated[OpsService, Depends(get_ops_service)]
+
+
+def get_knowledge_service(
+    session: SessionDep, settings: SettingsDep, gateway: AIGatewayDep
+) -> KnowledgeService:
+    return KnowledgeService(
+        documents=SqlDocumentRepository(session),
+        chunks=SqlChunkRepository(session),
+        retrievals=SqlRagRetrievalRepository(session),
+        embedder=create_embedding_provider(settings.embedding_provider),
+        gateway=gateway,
+    )
+
+
+KnowledgeServiceDep = Annotated[KnowledgeService, Depends(get_knowledge_service)]
 
 
 async def get_current_user(request: Request, session: SessionDep, tokens: TokenServiceDep) -> User:

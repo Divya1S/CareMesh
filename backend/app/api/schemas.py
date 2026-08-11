@@ -76,6 +76,48 @@ class ReviewDecisionResponse(BaseModel):
     decision: ReviewDecision
 
 
+class KnowledgeDocumentResponse(BaseModel):
+    id: UUID
+    title: str
+    source_name: str
+    version: int
+    created_at: datetime
+
+
+class DocumentIngestRequest(BaseModel):
+    title: str = Field(min_length=1, max_length=300)
+    source_name: str = Field(min_length=1, max_length=200)
+    content: str = Field(min_length=1, max_length=100_000)
+
+
+class DocumentIngestResponse(BaseModel):
+    document: KnowledgeDocumentResponse
+    chunk_count: int
+    unchanged: bool
+
+
+class AskRequest(BaseModel):
+    question: str = Field(min_length=3, max_length=500)
+
+
+class CitationResponse(BaseModel):
+    chunk_id: UUID
+    document_title: str
+    document_version: int
+    snippet: str
+    score: float
+    # Whether the answer actually cited this retrieved chunk.
+    used: bool
+
+
+class AskResponse(BaseModel):
+    answer: str
+    grounded: bool
+    simulated: bool | None
+    model: str | None
+    citations: list[CitationResponse]
+
+
 class OpsWorkflowResponse(BaseModel):
     id: UUID
     workflow_type: str

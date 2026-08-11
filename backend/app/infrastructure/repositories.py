@@ -17,6 +17,7 @@ from app.domain.entities import (
 )
 from app.domain.events import DomainEvent
 from app.domain.ids import uuid7
+from app.domain.knowledge import Document, DocumentChunk, DocumentStatus, RetrievedChunk
 from app.domain.risk import RiskReview, RiskSignal
 from app.domain.workflows import WorkflowInstance, WorkflowTransition, WorkflowType
 from app.infrastructure.models import (
@@ -24,9 +25,12 @@ from app.infrastructure.models import (
     AuthSessionRow,
     CareAssignmentRow,
     ConversationRow,
+    DocumentChunkRow,
+    DocumentRow,
     DomainEventLogRow,
     MessageRow,
     OrganizationRow,
+    RagRetrievalRow,
     RiskReviewRow,
     RiskSignalRow,
     UserRow,
@@ -564,6 +568,147 @@ class SqlEventLogQuery:
             update(DomainEventLogRow)
             .where(DomainEventLogRow.id == event_id)
             .values(published_at=None)
+        )
+
+
+def _document(row: DocumentRow) -> Document:
+    return Document(
+        id=row.id,
+        organization_id=row.organization_id,
+        title=row.title,
+        source_name=row.source_name,
+        version=row.version,
+        status=row.status,
+        content_sha256=row.content_sha256,
+        created_at=row.created_at,
+    )
+
+
+class SqlDocumentRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def add(self, document: Document) -> None:
+        self._session.add(
+            DocumentRow(
+                id=document.id,
+                organization_id=document.organization_id,
+                title=document.title,
+                source_name=document.source_name,
+                version=document.version,
+                status=document.status,
+                content_sha256=document.content_sha256,
+                created_at=document.created_at,
+            )
+        )
+        # Chunks reference this row in the same transaction; without mapped
+        # relationships SQLAlchemy will not order the inserts (see gotchas).
+        await self._session.flush()
+
+    async def latest_for_source(self, organization_id: UUID, source_name: str) -> Document | None:
+        row = await self._session.scalar(
+            select(DocumentRow)
+            .where(
+                DocumentRow.organization_id == organization_id,
+                DocumentRow.source_name == source_name,
+            )
+            .order_by(DocumentRow.version.desc())
+            .limit(1)
+        )
+        return _document(row) if row else None
+
+    async def set_status(self, document_id: UUID, status: DocumentStatus) -> None:
+        await self._session.execute(
+            update(DocumentRow).where(DocumentRow.id == document_id).values(status=status)
+        )
+
+    async def list_ready_for_org(self, organization_id: UUID) -> list[Document]:
+        rows = await self._session.scalars(
+            select(DocumentRow)
+            .where(
+                DocumentRow.organization_id == organization_id,
+                DocumentRow.status == DocumentStatus.READY,
+            )
+            .order_by(DocumentRow.title.asc())
+        )
+        return [_document(r) for r in rows]
+
+
+class SqlChunkRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def add(self, chunk: DocumentChunk, embedding: list[float]) -> None:
+        self._session.add(
+            DocumentChunkRow(
+                id=chunk.id,
+                document_id=chunk.document_id,
+                organization_id=chunk.organization_id,
+                chunk_index=chunk.chunk_index,
+                content=chunk.content,
+                embedding=embedding,
+                created_at=chunk.created_at,
+            )
+        )
+
+    async def search(
+        self, organization_id: UUID, embedding: list[float], k: int
+    ) -> list[RetrievedChunk]:
+        """Cosine similarity search over ready documents in one tenant."""
+        distance = DocumentChunkRow.embedding.cosine_distance(embedding)
+        rows = await self._session.execute(
+            select(DocumentChunkRow, DocumentRow, distance.label("distance"))
+            .join(DocumentRow, DocumentChunkRow.document_id == DocumentRow.id)
+            .where(
+                DocumentChunkRow.organization_id == organization_id,
+                DocumentRow.status == DocumentStatus.READY,
+            )
+            .order_by(distance.asc())
+            .limit(k)
+        )
+        results: list[RetrievedChunk] = []
+        for chunk_row, doc_row, dist in rows:
+            results.append(
+                RetrievedChunk(
+                    chunk=DocumentChunk(
+                        id=chunk_row.id,
+                        document_id=chunk_row.document_id,
+                        organization_id=chunk_row.organization_id,
+                        chunk_index=chunk_row.chunk_index,
+                        content=chunk_row.content,
+                        created_at=chunk_row.created_at,
+                    ),
+                    document_title=doc_row.title,
+                    document_version=doc_row.version,
+                    score=max(0.0, 1.0 - float(dist)),
+                )
+            )
+        return results
+
+
+class SqlRagRetrievalRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def add(
+        self,
+        *,
+        retrieval_id: UUID,
+        organization_id: UUID,
+        question: str,
+        ai_request_id: UUID | None,
+        retrieved: list[dict],
+        created_at: datetime,
+    ) -> None:
+        self._session.add(
+            RagRetrievalRow(
+                id=retrieval_id,
+                organization_id=organization_id,
+                question=question,
+                ai_request_id=ai_request_id,
+                retrieved=retrieved,
+                created_at=created_at,
+            )
         )
 
 

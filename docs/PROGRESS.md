@@ -5,15 +5,13 @@
 
 ## Current phase
 
-**S7: COMPLETE. THE VERTICAL SLICE S1 TO S7 IS DONE (2026-08-10).**
-Student, Dira, risk signal, clinician review, and ops console run end to
-end on one laptop at zero cost, with the full gate green: 69 backend tests,
-13 frontend tests, 7/7 evals, and the browser E2E journey.
+**RAG (spec P6): COMPLETE. Gate passed on 2026-08-10** (83 backend tests,
+13 frontend tests, 7/7 evals). The vertical slice S1 to S7 was completed
+earlier the same day.
 
-Next: the broadening phases from the proposal (section 11), in rough order:
-deep RAG (spec P6), richer Dira and clinician workspace, school and
-guardian surfaces (P9), payer workflows (P10), the observability compose
-profile, eval expansion, security hardening. Pick with the human.
+Next broadening candidates, pick with the human: school and guardian
+surfaces (P9), payer workflows (P10), the observability compose profile,
+eval expansion (add retrieval quality cases), security hardening.
 Phase 0 was approved by the human on 2026-08-10 and the approved plan is
 `docs/PHASE_0_PROPOSAL.md` (roadmap in section 11). All frontend work follows
 `docs/DESIGN.md` (added by the human; authoritative).
@@ -179,9 +177,33 @@ Phase 0 was approved by the human on 2026-08-10 and the approved plan is
     stack (API, relay, consumer, frontend), then drive student message,
     Dira reply, therapist accept, and ops visibility in headless Chromium.
 
+- 2026-08-10, RAG (spec P6), validated by `./scripts/verify.sh` and a browser
+  check of `/resources` with a reviewed screenshot (grounded answer in the
+  AI frame with SIMULATED chip and a citations row; zero console errors):
+  - Postgres swapped to the pgvector image (ADR 0006; one dev volume reset,
+    recorded in gotchas). Migration `0a19fa7b0620`: documents (versioned by
+    source_name, status lifecycle ingesting/ready/failed/superseded),
+    document_chunks (vector(384), HNSW cosine index), rag_retrievals (the
+    groundedness audit trail: what was retrieved, what was cited).
+  - Real pipeline: normalize, paragraph chunking with overlap (unit
+    tested), local lexical hashing embeddings (deterministic, normalized,
+    related text ranks higher than unrelated, unit tested), tenant scoped
+    cosine search, keyword overlap rerank, grounded generation through the
+    `knowledge_answer` v1 prompt with schema validated citations.
+  - Honest edges: unchanged content re-ingest is idempotent; changed
+    content creates version N+1 and supersedes the old one; a question
+    with no relevant sources declines without calling the LLM at all; org
+    B cannot retrieve org A documents (all integration tested).
+  - API `/api/v1/knowledge`: documents list (org members), ingest
+    (ops_admin only), ask (grounded answer plus citations with used
+    flags). Seed now ingests three fictional resource documents.
+  - Student surface at `/resources`: ask box, answer in the AIFrame with
+    the sources row (cited vs retrieved but not cited), library list.
+    Resources is now a live link in the chat rail.
+
 ## In flight
 
-- Nothing. The slice is closed cleanly, working tree committed.
+- Nothing. The RAG phase closed cleanly, working tree committed.
 
 ## Known limitations (intentional, coming in later phases)
 

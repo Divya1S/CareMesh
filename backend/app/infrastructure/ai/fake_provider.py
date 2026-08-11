@@ -16,8 +16,13 @@ the last user message:
 
 import asyncio
 import json
+import re
 
 from app.application.ai.types import LLMRequest, LLMResponse
+
+_SOURCE = re.compile(
+    r"SOURCE \d+ \[id=([0-9a-f-]+)\] (.+?) v\d+:\n(.*?)(?=\n\nSOURCE|\Z)", re.DOTALL
+)
 
 MODEL_NAME = "fake-sim-1"
 
@@ -71,6 +76,29 @@ _RISK_BY_SCENARIO = [
 ]
 
 
+def _grounded_answer(user_message: str) -> str:
+    """Simulated grounded generation: quotes the top retrieved source and
+    cites it. The retrieval feeding this is real; only the wording here is
+    canned, and the whole response stays labeled simulated."""
+    sources = _SOURCE.findall(user_message)
+    if not sources:
+        return json.dumps(
+            {"answer": "The provided sources do not cover this question.", "cited_chunk_ids": []}
+        )
+    chunk_id, title, content = sources[0]
+    sentences = re.split(r"(?<=[.!?])\s+", content.strip())
+    quoted = " ".join(sentences[:2]).strip()
+    cited = [chunk_id]
+    if len(sources) > 1:
+        cited.append(sources[1][0])
+    return json.dumps(
+        {
+            "answer": f"{quoted} (From: {title.strip()}.)",
+            "cited_chunk_ids": cited,
+        }
+    )
+
+
 def _match_scenario(text: str) -> int:
     lowered = text.lower()
     for index, (keywords, _) in enumerate(_SCENARIOS):
@@ -93,6 +121,8 @@ class FakeLLMProvider:
         if request.response_schema is not None:
             if "[[fail:malformed]]" in last_user:
                 text = '{"category": "not-a-category", "severity": 99}'
+            elif request.prompt_name == "knowledge_answer":
+                text = _grounded_answer(last_user)
             else:
                 category, severity, confidence = _RISK_BY_SCENARIO[
                     scenario if 0 <= scenario < len(_RISK_BY_SCENARIO) else 3

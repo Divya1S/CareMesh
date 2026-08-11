@@ -11,7 +11,9 @@ name: caremesh
 
 services:
   postgres:
-    image: postgres:16-alpine
+    # pgvector build of Postgres 16 (RAG vector storage, ADR 0006). Swapping
+    # from alpine required one dev volume reset; data is disposable seed data.
+    image: pgvector/pgvector:pg16
     environment:
       POSTGRES_USER: caremesh
       POSTGRES_PASSWORD: caremesh_dev_password

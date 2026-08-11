@@ -24,6 +24,9 @@ class Settings(BaseSettings):
     # ADR 0002: the fake provider is the default; real providers are opt in
     # and are the only thing in this project that can cost money.
     llm_provider: str = "fake"
+    # ADR 0006: real local lexical embeddings by default; semantic providers
+    # are swapped in by env var when deliberately enabled.
+    embedding_provider: str = "local_lexical"
     llm_api_key: str | None = None
     ai_timeout_seconds: float = 20.0
 
