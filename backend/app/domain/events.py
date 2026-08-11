@@ -32,7 +32,36 @@ AI_RESPONSE_GENERATED = "AIResponseGenerated"
 REFERRAL_SUBMITTED = "ReferralSubmitted"
 REFERRAL_DECIDED = "ReferralDecided"
 GUARDIAN_NOTIFICATION_REQUIRED = "GuardianNotificationRequired"
+APPOINTMENT_REQUESTED = "AppointmentRequested"
 INSURANCE_CLAIM_SUBMITTED = "InsuranceClaimSubmitted"
+
+
+def appointment_requested(
+    *,
+    appointment_request_id: UUID,
+    workflow_id: UUID,
+    patient_id: UUID,
+    conversation_id: UUID | None,
+    organization_id: UUID,
+    occurred_at: datetime,
+    correlation_id: str | None,
+) -> DomainEvent:
+    # The note stays in the database; ids only on the wire.
+    return DomainEvent(
+        event_type=APPOINTMENT_REQUESTED,
+        schema_version=1,
+        occurred_at=occurred_at,
+        organization_id=organization_id,
+        correlation_id=correlation_id,
+        payload={
+            "appointment_request_id": str(appointment_request_id),
+            "workflow_id": str(workflow_id),
+            "patient_id": str(patient_id),
+            "conversation_id": str(conversation_id) if conversation_id else None,
+        },
+    )
+
+
 INSURANCE_CLAIM_UPDATED = "InsuranceClaimUpdated"
 RISK_SIGNAL_DETECTED = "RiskSignalDetected"
 

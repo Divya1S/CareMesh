@@ -24,6 +24,7 @@ from app.domain.workflows import WorkflowInstance, WorkflowTransition, WorkflowT
 from app.infrastructure import metrics
 from app.infrastructure.models import (
     AIRequestRow,
+    AppointmentRequestRow,
     AuditLogRow,
     AuthSessionRow,
     CareAssignmentRow,
@@ -357,6 +358,7 @@ class SqlAIRequestLog:
                     error_type=entry.error_type,
                     request_messages=entry.request_messages,
                     response_text=entry.response_text,
+                    tool_calls=entry.tool_calls,
                     created_at=datetime.now(UTC),
                 )
             )
@@ -1007,6 +1009,59 @@ class SqlClaimRepository:
         await self._session.execute(
             update(ClaimRow).where(ClaimRow.id == claim_id).values(resubmit_note=note)
         )
+
+
+class SqlAppointmentRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def add(
+        self,
+        *,
+        request_id: UUID,
+        organization_id: UUID,
+        patient_id: UUID,
+        conversation_id: UUID | None,
+        workflow_id: UUID,
+        note: str,
+        created_at: datetime,
+    ) -> None:
+        # The workflow row is pending in this session; flush it first so the
+        # workflow_id foreign key resolves (see gotchas).
+        await self._session.flush()
+        self._session.add(
+            AppointmentRequestRow(
+                id=request_id,
+                organization_id=organization_id,
+                patient_id=patient_id,
+                conversation_id=conversation_id,
+                workflow_id=workflow_id,
+                note=note,
+                created_at=created_at,
+            )
+        )
+
+    async def get_by_id(self, request_id: UUID) -> AppointmentRequestRow | None:
+        return await self._session.get(AppointmentRequestRow, request_id)
+
+    async def list_joined(
+        self, organization_id: UUID, patient_ids: list[UUID], state: str
+    ) -> list[tuple[AppointmentRequestRow, str, str]]:
+        rows = await self._session.execute(
+            select(AppointmentRequestRow, WorkflowInstanceRow.state, UserRow.display_name)
+            .join(
+                WorkflowInstanceRow,
+                AppointmentRequestRow.workflow_id == WorkflowInstanceRow.id,
+            )
+            .join(UserRow, AppointmentRequestRow.patient_id == UserRow.id)
+            .where(
+                AppointmentRequestRow.organization_id == organization_id,
+                AppointmentRequestRow.patient_id.in_(patient_ids),
+                WorkflowInstanceRow.state == state,
+            )
+            .order_by(AppointmentRequestRow.created_at.asc())
+        )
+        return [(r, s, name) for r, s, name in rows]
 
 
 class SqlCareAssignmentRepository:

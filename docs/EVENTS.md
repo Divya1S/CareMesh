@@ -128,6 +128,19 @@ This file documents reality only; events land here when they ship.
   (referral_accepted | care_update). Content stays in the database.
 - **Consumers:** none yet (email or push delivery would subscribe here).
 
+### AppointmentRequested, v1
+
+- **Purpose:** Dira's request_appointment tool filed an appointment
+  request on the patient's behalf; a workflow opened in `requested`. The
+  care team acknowledges it in the clinician workspace.
+- **Producer:** the request_appointment tool handler
+  (`ConversationService._dira_tools`), same transaction as the request row
+  and workflow.
+- **Topic:** `caremesh.appointment.appointment_requested`
+- **Payload:** `appointment_request_id`, `workflow_id`, `patient_id`,
+  `conversation_id`. The note stays in the database.
+- **Consumers:** none yet (notification phases).
+
 ### InsuranceClaimSubmitted, v1
 
 - **Purpose:** a therapist submitted a claim; a claim workflow opened in

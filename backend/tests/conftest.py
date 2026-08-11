@@ -75,7 +75,7 @@ async def app(migrated):
                 "ai_requests, risk_signals, risk_reviews, workflow_instances, "
                 "workflow_transitions, documents, document_chunks, rag_retrievals, "
                 "referrals, guardian_links, guardian_updates, claims, eligibility_checks, "
-                "guardian_notifications, audit_logs CASCADE"
+                "guardian_notifications, audit_logs, appointment_requests CASCADE"
             )
         )
     await engine.dispose()

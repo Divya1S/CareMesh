@@ -12,7 +12,7 @@ import {
   getMe,
   listConversations,
   listMessages,
-  postMessage,
+  streamMessage,
   type Conversation,
   type Me,
   type Message,
@@ -34,6 +34,9 @@ export default function ChatPage() {
   const [draft, setDraft] = useState("");
   const [newTitle, setNewTitle] = useState("");
   const [busy, setBusy] = useState(false);
+  const [streamText, setStreamText] = useState("");
+  const [toolLines, setToolLines] = useState<string[]>([]);
+  const [streamingActive, setStreamingActive] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
 
@@ -72,7 +75,7 @@ export default function ChatPage() {
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ block: "end" });
-  }, [messages]);
+  }, [messages, streamText]);
 
   async function onStartConversation(event: React.FormEvent) {
     event.preventDefault();
@@ -87,12 +90,31 @@ export default function ChatPage() {
     event.preventDefault();
     if (!draft.trim() || !selectedId) return;
     setBusy(true);
+    setStreamText("");
+    setToolLines([]);
+    setStreamingActive(true);
     try {
-      await postMessage(selectedId, draft.trim());
-      setDraft("");
-      await refreshMessages(selectedId);
+      await streamMessage(selectedId, draft.trim(), (streamEvent) => {
+        if (streamEvent.type === "saved") {
+          setMessages((prev) => [...prev, streamEvent.message]);
+          setDraft("");
+        } else if (streamEvent.type === "tool") {
+          setToolLines((prev) => [...prev, streamEvent.summary]);
+        } else if (streamEvent.type === "delta") {
+          setStreamText((prev) => prev + streamEvent.text);
+        } else if (streamEvent.type === "message") {
+          setMessages((prev) => [...prev, streamEvent.message]);
+          setStreamingActive(false);
+        } else if (streamEvent.type === "error") {
+          setToolLines((prev) => [...prev, streamEvent.detail]);
+          setStreamingActive(false);
+        }
+      });
     } finally {
       setBusy(false);
+      setStreamingActive(false);
+      setStreamText("");
+      setToolLines([]);
     }
   }
 
@@ -239,6 +261,22 @@ export default function ChatPage() {
               </ChatBubble>
             ))
           )}
+          {streamingActive ? (
+            <div className="flex flex-col gap-1">
+              {toolLines.map((line, index) => (
+                <p key={index} className="text-[0.8125rem] font-medium text-ai">
+                  <span aria-hidden>✦</span> {line}
+                </p>
+              ))}
+              {streamText ? (
+                <ChatBubble sender="dira" simulated>
+                  {streamText}
+                </ChatBubble>
+              ) : (
+                <p className="text-[0.8125rem] text-ink-soft">Dira is thinking…</p>
+              )}
+            </div>
+          ) : null}
           <div ref={endRef} />
         </div>
 

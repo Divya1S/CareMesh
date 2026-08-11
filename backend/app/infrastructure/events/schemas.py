@@ -60,4 +60,5 @@ _DOMAIN_BY_EVENT = {
     "GuardianNotificationRequired": "guardian",
     "InsuranceClaimSubmitted": "billing",
     "InsuranceClaimUpdated": "billing",
+    "AppointmentRequested": "appointment",
 }

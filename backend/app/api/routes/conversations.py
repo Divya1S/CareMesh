@@ -1,6 +1,8 @@
+import json
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
+from fastapi.responses import StreamingResponse
 
 from app.api.deps import (
     ConversationServiceDep,
@@ -74,6 +76,40 @@ async def list_messages(
     offset: int = Query(default=0, ge=0),
 ) -> list[MessageResponse]:
     return [_message(m) for m in await service.list_messages(user, conversation_id, limit, offset)]
+
+
+@router.post(
+    "/{conversation_id}/messages/stream",
+    dependencies=[Depends(enforce_ai_rate_limit)],
+)
+async def post_message_and_stream_reply(
+    conversation_id: UUID,
+    body: MessageCreateRequest,
+    user: CurrentUserDep,
+    service: ConversationServiceDep,
+    correlation_id: CorrelationIdDep,
+) -> StreamingResponse:
+    """Saves the patient's message, then streams Dira's reply as SSE events:
+    saved (the user message), tool, delta, message (the persisted reply),
+    and error."""
+    saved = await service.post_message(
+        user, conversation_id, body.content, correlation_id, generate_reply=False
+    )
+
+    async def events():
+        yield _sse({"type": "saved", "message": _message(saved).model_dump(mode="json")})
+        async for event in service.stream_dira_reply(user, conversation_id, correlation_id):
+            yield _sse(event)
+
+    return StreamingResponse(
+        events(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+def _sse(payload: dict) -> str:
+    return f"data: {json.dumps(payload)}\n\n"
 
 
 @router.post(

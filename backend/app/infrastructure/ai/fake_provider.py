@@ -17,8 +17,9 @@ the last user message:
 import asyncio
 import json
 import re
+from collections.abc import AsyncIterator
 
-from app.application.ai.types import LLMRequest, LLMResponse
+from app.application.ai.types import LLMRequest, LLMResponse, ToolCall
 
 _SOURCE = re.compile(
     r"SOURCE \d+ \[id=([0-9a-f-]+)\] (.+?) v\d+:\n(.*?)(?=\n\nSOURCE|\Z)", re.DOTALL
@@ -107,8 +108,73 @@ def _match_scenario(text: str) -> int:
     return -1
 
 
+_TOOL_WORDS = {
+    "search_resources": (
+        "sleep better",
+        "grounding",
+        "resource",
+        "breathing",
+        "calm down",
+        "tip",
+        "advice",
+        "technique",
+    ),
+    "request_appointment": ("appointment", "schedule", "book a", "meet with"),
+}
+
+
+def _pick_tool_call(request: LLMRequest, last_user: str) -> ToolCall | None:
+    """Deterministic tool selection: only when tools are offered, no tool
+    result is present yet, and the message is not a crisis disclosure
+    (crisis always gets the direct crisis reply, never a detour)."""
+    if not request.tools or any(m.role == "tool" for m in request.messages):
+        return None
+    if _match_scenario(last_user) == 0:  # crisis scenario keywords
+        return None
+    lowered = last_user.lower()
+    available = {tool.name for tool in request.tools}
+    for name, words in _TOOL_WORDS.items():
+        if name in available and any(word in lowered for word in words):
+            if name == "search_resources":
+                arguments = {"query": last_user[:200]}
+            else:
+                arguments = {"note": last_user[:200]}
+            return ToolCall(id=f"call-{name}", name=name, arguments=arguments)
+    return None
+
+
+def _reply_after_tools(request: LLMRequest) -> str | None:
+    """After a tool round, compose the final reply from the tool result."""
+    tool_messages = [m for m in request.messages if m.role == "tool"]
+    if not tool_messages:
+        return None
+    last = tool_messages[-1]
+    if last.tool_call_id == "call-search_resources":
+        try:
+            results = json.loads(last.content)
+        except json.JSONDecodeError:
+            results = []
+        if results:
+            top = results[0]
+            return (
+                f"I looked in the resource library for you. {top['snippet']} "
+                f"(From: {top['title']}.) Want me to pull up more on this?"
+            )
+        return (
+            "I checked the resource library but did not find anything on "
+            "that. Your care team would be a good next step."
+        )
+    return (
+        "I let your care team know you would like an appointment. They will "
+        "reach out to set a time. Is there anything you want them to know "
+        "beforehand?"
+    )
+
+
 class FakeLLMProvider:
     name = "fake"
+    model_name = MODEL_NAME
+    simulated = True
 
     async def complete(self, request: LLMRequest) -> LLMResponse:
         last_user = next((m.content for m in reversed(request.messages) if m.role == "user"), "")
@@ -116,6 +182,33 @@ class FakeLLMProvider:
             await asyncio.sleep(3600)
         if "[[fail:error]]" in last_user:
             raise FakeProviderError("injected provider failure")
+
+        tool_call = _pick_tool_call(request, last_user)
+        if tool_call is not None:
+            await asyncio.sleep(0.01)
+            return LLMResponse(
+                text="",
+                model=MODEL_NAME,
+                provider=self.name,
+                input_tokens=sum(len(m.content) for m in request.messages) // 4,
+                output_tokens=8,
+                cost_usd=0.0,
+                simulated=True,
+                tool_calls=[tool_call],
+            )
+
+        after_tools = _reply_after_tools(request)
+        if after_tools is not None and request.response_schema is None:
+            await asyncio.sleep(0.01)
+            return LLMResponse(
+                text=after_tools,
+                model=MODEL_NAME,
+                provider=self.name,
+                input_tokens=sum(len(m.content) for m in request.messages) // 4,
+                output_tokens=len(after_tools) // 4,
+                cost_usd=0.0,
+                simulated=True,
+            )
 
         scenario = _match_scenario(last_user)
         if request.response_schema is not None:
@@ -149,3 +242,12 @@ class FakeLLMProvider:
             cost_usd=0.0,
             simulated=True,
         )
+
+    async def stream_text(self, request: LLMRequest) -> AsyncIterator[str]:
+        """Streams the same deterministic reply in word chunks. A real
+        adapter yields real tokens through this same interface."""
+        response = await self.complete(request)
+        words = response.text.split(" ")
+        for index in range(0, len(words), 3):
+            yield " ".join(words[index : index + 3]) + " "
+            await asyncio.sleep(0.02)

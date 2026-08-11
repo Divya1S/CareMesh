@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.application.ai.gateway import AIGateway
 from app.application.errors import RateLimitedError, UnauthorizedError
+from app.application.use_cases.appointments import AppointmentService
 from app.application.use_cases.auth import AuthService
 from app.application.use_cases.claims import ClaimsService
 from app.application.use_cases.conversations import ConversationService
@@ -25,6 +26,7 @@ from app.infrastructure.rate_limit import RedisRateLimiter
 from app.infrastructure.repositories import (
     SqlAIRequestLog,
     SqlAIRequestQuery,
+    SqlAppointmentRepository,
     SqlAuditLog,
     SqlAuthSessionRepository,
     SqlCareAssignmentRepository,
@@ -105,14 +107,36 @@ def get_ai_gateway(request: Request, settings: SettingsDep) -> AIGateway:
 AIGatewayDep = Annotated[AIGateway, Depends(get_ai_gateway)]
 
 
-def get_conversation_service(session: SessionDep, gateway: AIGatewayDep) -> ConversationService:
+def get_conversation_service(
+    session: SessionDep, gateway: AIGatewayDep, settings: SettingsDep
+) -> ConversationService:
     return ConversationService(
         conversations=SqlConversationRepository(session),
         messages=SqlMessageRepository(session),
         assignments=SqlCareAssignmentRepository(session),
         outbox=SqlEventOutbox(session),
         gateway=gateway,
+        knowledge=KnowledgeService(
+            documents=SqlDocumentRepository(session),
+            chunks=SqlChunkRepository(session),
+            retrievals=SqlRagRetrievalRepository(session),
+            embedder=create_embedding_provider(settings.embedding_provider),
+            gateway=None,
+        ),
+        appointments=SqlAppointmentRepository(session),
+        workflows=SqlWorkflowRepository(session),
     )
+
+
+def get_appointment_service(session: SessionDep) -> AppointmentService:
+    return AppointmentService(
+        appointments=SqlAppointmentRepository(session),
+        workflows=SqlWorkflowRepository(session),
+        assignments=SqlCareAssignmentRepository(session),
+    )
+
+
+AppointmentServiceDep = Annotated[AppointmentService, Depends(get_appointment_service)]
 
 
 def get_correlation_id(request: Request) -> str | None:

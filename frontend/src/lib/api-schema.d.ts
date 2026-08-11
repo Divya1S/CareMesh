@@ -125,6 +125,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/conversations/{conversation_id}/messages/stream": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Post Message And Stream Reply
+         * @description Saves the patient's message, then streams Dira's reply as SSE events:
+         *     saved (the user message), tool, delta, message (the persisted reply),
+         *     and error.
+         */
+        post: operations["post_message_and_stream_reply_api_v1_conversations__conversation_id__messages_stream_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/reviews": {
         parameters: {
             query?: never;
@@ -513,6 +535,40 @@ export interface paths {
         put?: never;
         /** Resubmit Claim */
         post: operations["resubmit_claim_api_v1_claims__claim_id__resubmit_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/appointments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Pending Requests */
+        get: operations["pending_requests_api_v1_appointments_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/appointments/{request_id}/acknowledge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Acknowledge */
+        post: operations["acknowledge_api_v1_appointments__request_id__acknowledge_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1402,6 +1458,41 @@ export interface operations {
             };
         };
     };
+    post_message_and_stream_reply_api_v1_conversations__conversation_id__messages_stream_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MessageCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_pending_reviews_api_v1_reviews_get: {
         parameters: {
             query?: never;
@@ -2119,6 +2210,61 @@ export interface operations {
                 "application/json": components["schemas"]["ClaimResubmitRequest"];
             };
         };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    pending_requests_api_v1_appointments_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    }[];
+                };
+            };
+        };
+    };
+    acknowledge_api_v1_appointments__request_id__acknowledge_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                request_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {

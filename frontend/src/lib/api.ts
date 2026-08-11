@@ -236,6 +236,60 @@ export const decideReview = (
     },
   );
 
+export type StreamEvent =
+  | { type: "saved"; message: Message }
+  | { type: "tool"; name: string; summary: string }
+  | { type: "delta"; text: string }
+  | { type: "message"; message: Message }
+  | { type: "error"; detail: string };
+
+/** Streams Dira's reply over SSE, invoking onEvent per event. */
+export async function streamMessage(
+  conversationId: string,
+  content: string,
+  onEvent: (event: StreamEvent) => void,
+): Promise<void> {
+  const token = getAccessToken();
+  const response = await fetch(
+    `${BASE_URL}/api/v1/conversations/${conversationId}/messages/stream`,
+    {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        ...(token ? { authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({ content }),
+    },
+  );
+  if (!response.ok || !response.body) throw await parseProblem(response);
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop() ?? "";
+    for (const line of lines) {
+      if (line.startsWith("data: ")) {
+        onEvent(JSON.parse(line.slice(6)) as StreamEvent);
+      }
+    }
+  }
+}
+
+export const listAppointments = () =>
+  request<
+    { request_id: string; patient_name: string; note: string; created_at: string }[]
+  >("/api/v1/appointments");
+
+export const acknowledgeAppointment = (requestId: string) =>
+  request<{ request_id: string; state: string }>(
+    `/api/v1/appointments/${requestId}/acknowledge`,
+    { method: "POST" },
+  );
+
 export const postMessage = (conversationId: string, content: string) =>
   request<Message>(`/api/v1/conversations/${conversationId}/messages`, {
     method: "POST",

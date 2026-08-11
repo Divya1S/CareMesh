@@ -8,9 +8,11 @@ import { Chip } from "@/components/ui/Chip";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { SeverityLabel } from "@/components/ui/SeverityLabel";
 import {
+  acknowledgeAppointment,
   decideReferral,
   decideReview,
   getMe,
+  listAppointments,
   listReviews,
   pendingReferrals,
   shareGuardianUpdate,
@@ -29,6 +31,9 @@ export default function ClinicianPage() {
   const [me, setMe] = useState<Me | null>(null);
   const [items, setItems] = useState<ReviewItem[]>([]);
   const [referrals, setReferrals] = useState<Referral[]>([]);
+  const [appointments, setAppointments] = useState<
+    { request_id: string; patient_name: string; note: string; created_at: string }[]
+  >([]);
   const [patients, setPatients] = useState<{ patient_id: string; name: string }[]>([]);
   const [updatePatient, setUpdatePatient] = useState("");
   const [updateText, setUpdateText] = useState("");
@@ -41,14 +46,16 @@ export default function ClinicianPage() {
   const [loaded, setLoaded] = useState(false);
 
   const refresh = useCallback(async () => {
-    const [reviews, pending, assigned] = await Promise.all([
+    const [reviews, pending, assigned, requests] = await Promise.all([
       listReviews(),
       pendingReferrals(),
       myPatients(),
+      listAppointments(),
     ]);
     setItems(reviews);
     setReferrals(pending);
     setPatients(assigned);
+    setAppointments(requests);
     setDecided({});
     setEditing(null);
   }, []);
@@ -263,6 +270,38 @@ export default function ClinicianPage() {
           ) : null}
         </div>
       )}
+
+      <section className="mt-10">
+        <h2 className="mb-2 font-semibold text-ink">Appointment requests</h2>
+        {appointments.length === 0 ? (
+          <p className="text-[0.875rem] text-ink-soft">
+            None waiting. Requests made through Dira appear here.
+          </p>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {appointments.map((a) => (
+              <div
+                key={a.request_id}
+                className="flex flex-wrap items-center gap-3 rounded-card border border-line bg-card p-4 shadow-soft"
+              >
+                <Chip tone="warn">requested</Chip>
+                <span className="font-medium text-ink">{a.patient_name}</span>
+                <span className="text-[0.875rem] text-ink-soft">{a.note}</span>
+                <Button
+                  className="ml-auto"
+                  variant="ghost"
+                  onClick={async () => {
+                    await acknowledgeAppointment(a.request_id);
+                    await refresh();
+                  }}
+                >
+                  Acknowledge
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
 
       <section className="mt-10">
         <h2 className="mb-2 font-semibold text-ink">School referrals</h2>

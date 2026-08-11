@@ -144,13 +144,18 @@ class KnowledgeService:
     async def list_documents(self, actor: User) -> list[Document]:
         return await self._documents.list_ready_for_org(actor.organization_id)
 
+    async def retrieve(self, organization_id, question: str) -> list[RetrievedChunk]:
+        """Tenant scoped retrieval with rerank, shared by ask and by Dira's
+        search_resources tool."""
+        query_embedding = self._embedder.embed([question])[0]
+        candidates = await self._chunks.search(organization_id, query_embedding, RETRIEVE_K)
+        ranked = [c for c in rerank(question, candidates) if c.score >= MIN_SCORE]
+        return ranked[:ANSWER_WITH_TOP]
+
     async def ask(self, actor: User, question: str, correlation_id: str | None) -> KnowledgeAnswer:
         if self._gateway is None:
             raise RuntimeError("KnowledgeService was built without a gateway")
-        query_embedding = self._embedder.embed([question])[0]
-        candidates = await self._chunks.search(actor.organization_id, query_embedding, RETRIEVE_K)
-        ranked = [c for c in rerank(question, candidates) if c.score >= MIN_SCORE]
-        top = ranked[:ANSWER_WITH_TOP]
+        top = await self.retrieve(actor.organization_id, question)
         now = datetime.now(UTC)
 
         if not top:

@@ -163,6 +163,7 @@ class AIRequestRow(Base):
     error_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
     request_messages: Mapped[dict] = mapped_column(JSONB, nullable=False)
     response_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    tool_calls: Mapped[dict] = mapped_column(JSONB, nullable=False, default=list)
     created_at: Mapped[datetime] = _created_at()
 
 
@@ -406,6 +407,25 @@ class AuditLogRow(Base):
     resource_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
     resource_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True), nullable=True)
     detail: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    created_at: Mapped[datetime] = _created_at()
+
+
+class AppointmentRequestRow(Base):
+    """An appointment request raised by Dira's request_appointment tool on
+    the patient's behalf. State lives in workflow_instances."""
+
+    __tablename__ = "appointment_requests"
+
+    id: Mapped[UUID] = _uuid_pk()
+    organization_id: Mapped[UUID] = mapped_column(ForeignKey("organizations.id"), nullable=False)
+    patient_id: Mapped[UUID] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    conversation_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("conversations.id"), nullable=True
+    )
+    workflow_id: Mapped[UUID] = mapped_column(
+        ForeignKey("workflow_instances.id"), nullable=False, unique=True
+    )
+    note: Mapped[str] = mapped_column(String(500), nullable=False)
     created_at: Mapped[datetime] = _created_at()
 
 

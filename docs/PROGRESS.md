@@ -5,8 +5,28 @@
 
 ## Current phase
 
-**Hiring upgrade plan (approved 2026-08-10), phase H1 (README, docs, CI)
-in progress.** The plan lives in the session plan file and here: H1 docs
+**Hiring upgrade plan (approved 2026-08-10): H1 and H2 complete, H3
+(semantic embeddings) next.**
+
+- H1 done 2026-08-11: README with screenshots, diagram, capability map;
+  ARCHITECTURE, AI_ARCHITECTURE, WORKFLOWS, API, DATABASE,
+  LOCAL_DEVELOPMENT docs; MIT license; GitHub Actions CI running the full
+  verify gate (green on the first run); repo description and topics set.
+- H2 done 2026-08-11 (gate: 105 backend tests, 13 frontend, 20/20 eval
+  cases, e2e passed, streaming and tool use verified in the browser with
+  reviewed screenshots): the gateway owns a bounded tool loop (ADR 0007)
+  with every executed call audited in ai_requests.tool_calls (migration
+  74781dbf8d62); Dira's allow listed tools are search_resources (agentic
+  RAG over the tenant's library, citations in the reply) and
+  request_appointment (opens an appointment_request workflow, migration
+  1dd83da070ad, AppointmentRequested event, acknowledged by the therapist
+  in the workspace); crisis disclosures bypass tools entirely (eval
+  gated); SSE streaming endpoint (saved, tool, delta, message events)
+  with the chat rendering live deltas and tool activity lines; dira eval
+  suite grew to 9 cases including tool selection and crisis precedence.
+  Honest note for H3: a "sleeping better" paraphrase retrieved the wrong
+  document under lexical embeddings, exactly the gap semantic embeddings
+  close. The plan lives in the session plan file and here: H1 docs
 and CI, H2 agentic Dira (tool calling plus SSE streaming), H3 semantic
 embeddings (fastembed, approved ~90MB download) with a lexical vs
 semantic eval comparison, H4 real Gemini and Anthropic adapters (user

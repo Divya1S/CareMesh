@@ -11,6 +11,7 @@ class WorkflowType(StrEnum):
     RISK_ESCALATION = "risk_escalation"
     REFERRAL = "referral"
     CLAIM = "claim"
+    APPOINTMENT_REQUEST = "appointment_request"
 
 
 class RiskEscalationState(StrEnum):
@@ -30,6 +31,11 @@ class ClaimState(StrEnum):
     APPROVED = "approved"
     DENIED = "denied"
     RESUBMITTED = "resubmitted"
+
+
+class AppointmentRequestState(StrEnum):
+    REQUESTED = "requested"
+    ACKNOWLEDGED = "acknowledged"
 
 
 # Allowed transitions per workflow type. A transition not listed here is a
@@ -52,6 +58,10 @@ TRANSITIONS_BY_TYPE: dict[WorkflowType, dict[str, frozenset[str]]] = {
         ClaimState.DENIED: frozenset({ClaimState.RESUBMITTED}),
         ClaimState.RESUBMITTED: frozenset({ClaimState.APPROVED, ClaimState.DENIED}),
         ClaimState.APPROVED: frozenset(),
+    },
+    WorkflowType.APPOINTMENT_REQUEST: {
+        AppointmentRequestState.REQUESTED: frozenset({AppointmentRequestState.ACKNOWLEDGED}),
+        AppointmentRequestState.ACKNOWLEDGED: frozenset(),
     },
 }
 
