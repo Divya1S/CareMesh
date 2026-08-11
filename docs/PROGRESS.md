@@ -5,8 +5,28 @@
 
 ## Current phase
 
-**Hiring upgrade plan (approved 2026-08-10): H1 through H5 complete. H6
-(Dockerfiles, deployment docs, load numbers, final review) remains.**
+**Hiring upgrade plan (approved 2026-08-10): complete. H1 through H6
+all done; the spec's final gate (P17) has been run, fixed, and
+recorded in docs/FINAL_REVIEW.md. The project is in a finished state.**
+
+- H6 done 2026-08-11 (gate green; 118 backend tests): (a)
+  docker/backend.Dockerfile (uv two stage, non root) plus the compose
+  app profile running api, relay, and consumer with a one shot migrate
+  container; chat to risk signal verified end to end against
+  containers; a root .dockerignore keeps backend/.env out of images.
+  (b) docs/DEPLOYMENT.md, a paper GCP mapping labeled never deployed.
+  (c) backend/scripts/loadtest.py with honest numbers in the README
+  (chat with Dira reply p95 37ms, authed list p95 82ms at concurrency
+  20, inside the platform's own rate limits). (d) P17 final review:
+  three parallel six perspective review passes; all high and medium
+  findings fixed and re validated (structural crisis over tools guard
+  plus a deterministic crisis phrase floor in domain/risk.py, SSE
+  commit before streaming, worker crash resilience, safe gateway audit
+  writes, bounded idempotent tool loop, two bucket login limiter,
+  X-Request-ID validation, Redis timeouts and atomic limiter, audited
+  ops transcript reads, streaming provenance from a start event,
+  enforced eval gates, doc corrections). Findings, fixes, and accepted
+  gaps: docs/FINAL_REVIEW.md.
 
 - H5 done 2026-08-11 (gate green; 114 backend tests): MCP server at
   backend/mcp_server (mcp SDK 2.0, stdio) with two allow listed read
