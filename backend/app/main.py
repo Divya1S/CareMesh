@@ -34,7 +34,11 @@ async def lifespan(app: FastAPI):
     engine = create_engine(settings.database_url)
     app.state.engine = engine
     app.state.session_factory = create_session_factory(engine)
-    app.state.redis = Redis.from_url(settings.redis_url)
+    # Bounded socket timeouts: a blackholed Redis must fail fast with an
+    # error instead of hanging every login and chat request forever.
+    app.state.redis = Redis.from_url(
+        settings.redis_url, socket_connect_timeout=2.0, socket_timeout=2.0
+    )
     gauge_task = asyncio.create_task(run_gauge_refresher(app.state.session_factory))
     yield
     gauge_task.cancel()

@@ -8,6 +8,7 @@ from app.api.deps import (
     ConversationServiceDep,
     CorrelationIdDep,
     CurrentUserDep,
+    SessionDep,
     enforce_ai_rate_limit,
 )
 from app.api.schemas import (
@@ -87,6 +88,7 @@ async def post_message_and_stream_reply(
     body: MessageCreateRequest,
     user: CurrentUserDep,
     service: ConversationServiceDep,
+    session: SessionDep,
     correlation_id: CorrelationIdDep,
 ) -> StreamingResponse:
     """Saves the patient's message, then streams Dira's reply as SSE events:
@@ -95,6 +97,11 @@ async def post_message_and_stream_reply(
     saved = await service.post_message(
         user, conversation_id, body.content, correlation_id, generate_reply=False
     )
+    # Commit before the first byte streams: the request session's normal
+    # commit happens after the response body finishes, so a mid stream
+    # disconnect would otherwise roll back the message and its outbox
+    # event after the client was already told it was saved.
+    await session.commit()
 
     async def events():
         yield _sse({"type": "saved", "message": _message(saved).model_dump(mode="json")})

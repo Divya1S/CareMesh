@@ -1062,6 +1062,23 @@ class SqlAppointmentRepository:
     async def get_by_id(self, request_id: UUID) -> AppointmentRequestRow | None:
         return await self._session.get(AppointmentRequestRow, request_id)
 
+    async def has_open_for_conversation(self, conversation_id: UUID, state: str) -> bool:
+        """Idempotency guard for Dira's request_appointment tool: one open
+        request per conversation, no matter how many times a model asks."""
+        row = await self._session.scalar(
+            select(AppointmentRequestRow.id)
+            .join(
+                WorkflowInstanceRow,
+                AppointmentRequestRow.workflow_id == WorkflowInstanceRow.id,
+            )
+            .where(
+                AppointmentRequestRow.conversation_id == conversation_id,
+                WorkflowInstanceRow.state == state,
+            )
+            .limit(1)
+        )
+        return row is not None
+
     async def list_joined(
         self, organization_id: UUID, patient_ids: list[UUID], state: str
     ) -> list[tuple[AppointmentRequestRow, str, str]]:

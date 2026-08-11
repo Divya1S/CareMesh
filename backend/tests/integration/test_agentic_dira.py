@@ -147,3 +147,39 @@ async def test_streaming_endpoint_emits_tool_delta_and_message_events(
         await client.get(f"/api/v1/conversations/{conversation_id}/messages", headers=patient)
     ).json()
     assert [m["sender_type"] for m in messages] == ["patient", "dira"]
+
+
+async def test_repeated_appointment_requests_create_one_open_request(
+    client, app, seeded, auth_header
+):
+    """The request_appointment tool is idempotent per conversation: a second
+    ask while one is open must not create another workflow or row."""
+    patient = await auth_header("patient@a.caremesh.org")
+    conversation_id = await start_conversation(client, patient)
+    for _ in range(2):
+        await client.post(
+            f"/api/v1/conversations/{conversation_id}/messages",
+            json={"content": "can you schedule an appointment for me?"},
+            headers=patient,
+        )
+    async with app.state.session_factory() as session:
+        requests = (await session.scalars(select(AppointmentRequestRow))).all()
+    assert len(requests) == 1
+
+
+async def test_hostile_request_id_is_replaced_not_stored(client, seeded, auth_header):
+    """A client supplied X-Request-ID that would not fit the String(64)
+    correlation columns is replaced with a generated id instead of
+    truncating an insert into a 500."""
+    patient = await auth_header("patient@a.caremesh.org")
+    conversation_id = await start_conversation(client, patient)
+    hostile = "a" * 100 + "\ninjected-log-line"
+    response = await client.post(
+        f"/api/v1/conversations/{conversation_id}/messages",
+        json={"content": "hello there"},
+        headers={**patient, "X-Request-ID": hostile},
+    )
+    assert response.status_code == 201
+    echoed = response.headers.get("x-request-id", "")
+    assert echoed != hostile
+    assert len(echoed) <= 64

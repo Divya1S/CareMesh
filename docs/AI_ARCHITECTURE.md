@@ -68,6 +68,15 @@ retrieval, free, honest about not being semantic); providers swap by
 The system never diagnoses, never prescribes, and never lets an AI
 suggestion silently become a clinician decision: accept, edit, and reject
 are explicit audited acts that resolve a workflow. Crisis category signals
-always escalate regardless of severity score. Safety properties of Dira's
-replies and injection resistance are regression tested in the eval suites
-(docs/EVALUATION.md).
+always escalate regardless of severity score, and a deterministic crisis
+phrase floor in `domain/risk.py` forces escalation even when a model
+(real, or steered by the message itself) under classifies. Crisis
+precedence over tools is structural, not a prompt hope: the application
+layer offers Dira zero tools on a turn whose latest patient message
+contains crisis language, so no provider can detour a crisis disclosure
+into a search or an appointment. The gateway also bounds tool use (three
+rounds, one executed call per round) and aborts the reply if a mutating
+tool fails mid write. Safety properties of Dira's replies and injection
+resistance are regression tested in the eval suites (docs/EVALUATION.md);
+those run on the deterministic fake provider and pin the prompt and the
+structural guards, not a real model's judgment.

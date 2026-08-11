@@ -13,6 +13,7 @@ from dataclasses import replace
 from typing import Protocol
 from uuid import UUID
 
+import structlog
 from pydantic import BaseModel, ValidationError
 
 from app.application.ai.prompts import get_prompt
@@ -29,8 +30,14 @@ from app.application.ai.types import (
 from app.application.errors import AppError
 from app.domain.ids import uuid7
 
-# A model gets at most this many rounds of tool use before it must answer.
+logger = structlog.get_logger()
+
+# A model gets at most this many rounds of tool use before it must answer,
+# and at most this many executed tool calls per round. Both bounds are
+# cost and blast radius controls: a steered model cannot fan one message
+# out into an unbounded pile of tool side effects.
 MAX_TOOL_ITERATIONS = 3
+MAX_TOOL_CALLS_PER_ROUND = 1
 
 
 class AIProviderError(AppError):
@@ -135,9 +142,8 @@ class AIGateway:
             entry.model = response.model
             entry.simulated = response.simulated
             entry.validation_ok = True if response_schema else None
-            entry.input_tokens = response.input_tokens
-            entry.output_tokens = response.output_tokens
-            entry.cost_usd = response.cost_usd
+            # Usage was accumulated per provider call in _call_validated, so
+            # a tool conversation is billed as the sum of its rounds.
             entry.response_text = response.text
             return GatewayResult(
                 text=response.text,
@@ -150,7 +156,27 @@ class AIGateway:
             )
         finally:
             entry.latency_ms = round((time.perf_counter() - started) * 1000, 1)
+            await self._log_safely(entry)
+
+    @staticmethod
+    def _accumulate_usage(entry: AIRequestLogEntry, response: LLMResponse) -> None:
+        entry.input_tokens += response.input_tokens
+        entry.output_tokens += response.output_tokens
+        entry.cost_usd += response.cost_usd
+
+    async def _log_safely(self, entry: AIRequestLogEntry) -> None:
+        """Auditing must never become a failure mode of the thing it audits:
+        an exception raised here (inside the callers' finally blocks) would
+        replace the real error and roll back the patient's message."""
+        try:
             await self._log.add(entry)
+        except Exception as exc:
+            logger.error(
+                "ai_request_log_write_failed",
+                ai_request_id=entry.id,
+                prompt_name=entry.prompt_name,
+                error_type=type(exc).__name__,
+            )
 
     async def _call_validated(
         self, request: LLMRequest, tools: Sequence[Tool], entry: AIRequestLogEntry
@@ -165,9 +191,10 @@ class AIGateway:
             response = await asyncio.wait_for(
                 self._provider.complete(request), timeout=self._timeout
             )
+            self._accumulate_usage(entry, response)
             if not (response.tool_calls and registry):
                 break
-            for call in response.tool_calls:
+            for call in response.tool_calls[:MAX_TOOL_CALLS_PER_ROUND]:
                 result = await self._run_tool(registry, call.name, call.arguments)
                 activities.append(
                     ToolActivity(
@@ -188,6 +215,7 @@ class AIGateway:
                 response = await asyncio.wait_for(
                     self._provider.complete(request), timeout=self._timeout
                 )
+                self._accumulate_usage(entry, response)
             if request.response_schema is None:
                 return response, None, activities, messages
             try:
@@ -238,15 +266,22 @@ class AIGateway:
         registry = {tool.definition.name: tool for tool in tools}
         activities: list[ToolActivity] = []
         messages = list(request.messages)
+        # Provenance is decided before streaming starts so the UI can label
+        # the live bubble from data. Unknown defaults to simulated: wrongly
+        # labeling real output SIMULATED is safe, the reverse is not.
+        provider_simulated = bool(getattr(self._provider, "simulated", True))
+        entry.simulated = provider_simulated
         started = time.perf_counter()
         try:
+            yield {"type": "start", "simulated": provider_simulated}
             for _ in range(MAX_TOOL_ITERATIONS):
                 response = await asyncio.wait_for(
                     self._provider.complete(request), timeout=self._timeout
                 )
+                self._accumulate_usage(entry, response)
                 if not (response.tool_calls and registry):
                     break
-                for call in response.tool_calls:
+                for call in response.tool_calls[:MAX_TOOL_CALLS_PER_ROUND]:
                     result = await self._run_tool(registry, call.name, call.arguments)
                     activities.append(
                         ToolActivity(
@@ -267,11 +302,18 @@ class AIGateway:
                 chunks.append(delta)
                 yield {"type": "delta", "text": delta}
             text = "".join(chunks).strip()
+            if not text:
+                # A safety blocked or dried up stream must surface as a
+                # failure, not persist an empty reply audited as ok. The
+                # worst case is exactly a crisis message tripping a real
+                # provider's filter and the student seeing a blank bubble.
+                raise AIProviderError("The AI provider streamed no text")
 
             entry.model = getattr(self._provider, "model_name", self._provider.name)
-            entry.simulated = bool(getattr(self._provider, "simulated", False))
-            entry.input_tokens = sum(len(m.content) for m in messages) // 4
-            entry.output_tokens = len(text) // 4
+            # Streamed chunks carry no usage metadata, so the final round is
+            # estimated; the tool rounds above were accumulated for real.
+            entry.input_tokens += sum(len(m.content) for m in messages) // 4
+            entry.output_tokens += len(text) // 4
             entry.request_messages = [{"role": m.role, "content": m.content} for m in messages]
             entry.response_text = text
             yield {
@@ -300,7 +342,7 @@ class AIGateway:
             raise AIProviderError("The AI provider failed") from exc
         finally:
             entry.latency_ms = round((time.perf_counter() - started) * 1000, 1)
-            await self._log.add(entry)
+            await self._log_safely(entry)
 
     @staticmethod
     async def _run_tool(registry: dict[str, Tool], name: str, arguments: dict) -> ToolResult:
@@ -314,7 +356,15 @@ class AIGateway:
             )
         try:
             return await tool.run(arguments)
-        except Exception as exc:  # tool failures degrade, never crash the reply
+        except Exception as exc:
+            logger.warning("tool_failed", tool=name, error_type=type(exc).__name__)
+            if tool.mutates:
+                # A failed write has likely poisoned the session; degrading
+                # would keep streaming over a transaction that can no longer
+                # commit and could tell the user a write happened when it
+                # did not. Abort the reply instead.
+                raise AIProviderError(f"The {name} tool failed mid write") from exc
+            # Read only tool failures degrade: the model answers without it.
             return ToolResult(
                 content=f"The tool {name} failed: {type(exc).__name__}.",
                 summary=f"The {name} tool failed",

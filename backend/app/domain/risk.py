@@ -64,6 +64,31 @@ class RiskReview:
 ESCALATION_SEVERITY_THRESHOLD = 2
 ALWAYS_ESCALATE_CATEGORIES = frozenset({RiskCategory.SELF_HARM, RiskCategory.CRISIS})
 
+# Deterministic crisis language floor. A model (real or steered by a
+# crafted message) can under classify; text that hits these phrases
+# escalates to human review and makes Dira's tools unavailable for the
+# turn regardless of what any model says. Deliberately high precision:
+# the model still catches the paraphrases this list misses.
+CRISIS_PHRASES = (
+    "kill myself",
+    "suicide",
+    "suicidal",
+    "end my life",
+    "end it all",
+    "hurt myself",
+    "hurting myself",
+    "harm myself",
+    "self harm",
+    "self-harm",
+    "want to die",
+    "better off dead",
+)
+
+
+def contains_crisis_language(text: str) -> bool:
+    lowered = text.lower()
+    return any(phrase in lowered for phrase in CRISIS_PHRASES)
+
 
 def escalation_required(category: RiskCategory, severity: int) -> bool:
     if category in ALWAYS_ESCALATE_CATEGORIES:

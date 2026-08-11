@@ -83,6 +83,7 @@ services:
   api:
     build: *backend_build
     profiles: ["app"]
+    restart: unless-stopped
     environment: *backend_env
     ports:
       - "${API_PORT:-8000}:8000"
@@ -102,6 +103,7 @@ services:
   relay:
     build: *backend_build
     profiles: ["app"]
+    restart: unless-stopped
     command: ["python", "-m", "app.workers.relay"]
     environment: *backend_env
     depends_on:
@@ -113,6 +115,7 @@ services:
   consumer:
     build: *backend_build
     profiles: ["app"]
+    restart: unless-stopped
     command: ["python", "-m", "app.workers.conversation_consumer"]
     environment: *backend_env
     depends_on:

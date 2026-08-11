@@ -22,6 +22,7 @@ from app.domain.events import (
     patient_message_created,
 )
 from app.domain.ids import uuid7
+from app.domain.risk import contains_crisis_language
 from app.domain.workflows import AppointmentRequestState, WorkflowType
 
 # How much conversation history Dira sees. Enough for continuity in S5;
@@ -176,6 +177,19 @@ class ConversationService:
             )
 
         async def request_appointment(arguments: dict) -> ToolResult:
+            # Idempotent per conversation: a model asking repeatedly (or a
+            # steered model asking many times in one turn) creates at most
+            # one open request for the care team.
+            if await self._appointments.has_open_for_conversation(
+                conversation.id, AppointmentRequestState.REQUESTED.value
+            ):
+                return ToolResult(
+                    content=(
+                        "An appointment request from this conversation is "
+                        "already waiting for the care team."
+                    ),
+                    summary="An appointment request is already pending",
+                )
             note = str(arguments.get("note", ""))[:500]
             now = datetime.now(UTC)
             request_id = uuid7()
@@ -245,8 +259,25 @@ class ConversationService:
                     },
                 ),
                 run=request_appointment,
+                mutates=True,
             ),
         ]
+
+    def _tools_for_turn(
+        self,
+        conversation: Conversation,
+        correlation_id: str | None,
+        llm_messages: list[LLMMessage],
+    ) -> list[Tool]:
+        """Crisis precedence, enforced structurally: when the latest patient
+        message contains crisis language, Dira gets no tools at all this
+        turn, so no model (real or fake) can detour into a search or an
+        appointment instead of the direct crisis reply. Provider independent
+        on purpose; the fake provider's scenario logic is not the guarantee."""
+        last_user = next((m.content for m in reversed(llm_messages) if m.role == "user"), "")
+        if contains_crisis_language(last_user):
+            return []
+        return self._dira_tools(conversation, correlation_id)
 
     async def _persist_dira_reply(
         self, conversation: Conversation, result, correlation_id: str | None
@@ -290,7 +321,7 @@ class ConversationService:
                 user_messages=llm_messages,
                 organization_id=conversation.organization_id,
                 correlation_id=correlation_id,
-                tools=self._dira_tools(conversation, correlation_id),
+                tools=self._tools_for_turn(conversation, correlation_id, llm_messages),
             )
         except AppError:
             return None
@@ -312,7 +343,7 @@ class ConversationService:
                 user_messages=llm_messages,
                 organization_id=conversation.organization_id,
                 correlation_id=correlation_id,
-                tools=self._dira_tools(conversation, correlation_id),
+                tools=self._tools_for_turn(conversation, correlation_id, llm_messages),
             ):
                 if event["type"] == "result":
                     result = event["result"]

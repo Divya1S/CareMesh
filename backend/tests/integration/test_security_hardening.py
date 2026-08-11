@@ -36,8 +36,9 @@ async def test_login_brute_force_returns_429_with_retry_after(client, app, seede
     from app.infrastructure.settings import get_settings
 
     limit = get_settings().login_attempts_per_minute
-    # httpx's ASGI transport reports the client as 127.0.0.1.
-    await app.state.redis.set(f"rl:login:127.0.0.1:{email}", limit, ex=60)
+    # Exhaust the per account bucket; the per address bucket is a separate
+    # independent key (two buckets since the final review).
+    await app.state.redis.set(f"rl:login:acct:{email}", limit, ex=60)
 
     response = await client.post(
         "/api/v1/auth/login", json={"email": email, "password": "whatever"}

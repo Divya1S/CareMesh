@@ -12,7 +12,12 @@ from app.application.ai.types import LLMMessage
 from app.application.errors import NotFoundError
 from app.domain import events as domain_events
 from app.domain.ids import uuid7
-from app.domain.risk import RiskCategory, RiskSignal, escalation_required
+from app.domain.risk import (
+    RiskCategory,
+    RiskSignal,
+    contains_crisis_language,
+    escalation_required,
+)
 from app.domain.workflows import RiskEscalationState, WorkflowType
 
 
@@ -74,7 +79,13 @@ class RiskAnalysisService:
         )
         await self._risks.add_signal(signal)
 
-        escalate = escalation_required(signal.category, signal.severity)
+        # Deterministic floor: crisis phrases in the raw message escalate to
+        # human review even if the model (real, or steered by the message
+        # itself) under classified. The model can only add escalations on
+        # top of this floor, never remove them.
+        escalate = escalation_required(signal.category, signal.severity) or (
+            contains_crisis_language(message.content)
+        )
         await self._outbox.add(
             domain_events.risk_signal_detected(
                 risk_signal_id=signal.id,

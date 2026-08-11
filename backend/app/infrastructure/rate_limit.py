@@ -26,9 +26,13 @@ class RedisRateLimiter:
 
     async def allow(self, key: str, limit: int, window_seconds: int) -> RateDecision:
         full_key = f"rl:{key}"
-        count = await self._redis.incr(full_key)
-        if count == 1:
-            await self._redis.expire(full_key, window_seconds)
+        # One pipeline round trip; EXPIRE NX on every call so a dropped
+        # connection between INCR and EXPIRE can never leave a counter
+        # without a TTL (which would rate limit that key forever).
+        pipe = self._redis.pipeline(transaction=True)
+        pipe.incr(full_key)
+        pipe.expire(full_key, window_seconds, nx=True)
+        count, _ = await pipe.execute()
         if count <= limit:
             return RateDecision(allowed=True, retry_after_seconds=0)
         ttl = await self._redis.ttl(full_key)

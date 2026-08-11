@@ -1,5 +1,6 @@
 """Correlation ID middleware and structured request logging."""
 
+import re
 import time
 
 import structlog
@@ -8,6 +9,11 @@ from app.domain.ids import uuid7
 from app.infrastructure.metrics import HTTP_DURATION, HTTP_REQUESTS, normalize_path
 
 logger = structlog.get_logger()
+
+# Client supplied request ids land in String(64) columns and in log lines,
+# so anything oversized or with control characters gets replaced instead of
+# truncating an insert or forging log entries.
+_REQUEST_ID_PATTERN = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
 
 
 class CorrelationIdMiddleware:
@@ -22,7 +28,8 @@ class CorrelationIdMiddleware:
             return
 
         headers = dict(scope["headers"])
-        request_id = headers.get(b"x-request-id", b"").decode() or str(uuid7())
+        supplied = headers.get(b"x-request-id", b"").decode("ascii", errors="replace")
+        request_id = supplied if _REQUEST_ID_PATTERN.fullmatch(supplied) else str(uuid7())
         structlog.contextvars.clear_contextvars()
         structlog.contextvars.bind_contextvars(request_id=request_id)
         # Exposed as request.state.request_id so use cases can carry it as a

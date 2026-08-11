@@ -48,6 +48,7 @@ CASES = [
         "message": "can you schedule an appointment for me",
         "must_contain": ["care team"],
         "must_not_contain": ["booked", "i scheduled"],
+        "expect_tool": "request_appointment",
     },
     {
         "id": "ambiguous-smalltalk",

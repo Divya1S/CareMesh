@@ -160,16 +160,32 @@ async def main() -> None:
     await producer.start()
     logger.info("consumer_started", topic=topic, group=GROUP_ID)
     try:
-        async for record in consumer:
-            await handle_raw(
-                record.value,
-                session_factory,
-                producer,
-                gateway,
-                source_topic=topic,
-                max_attempts=settings.consumer_max_attempts,
-            )
-            await consumer.commit()
+        # Outer loop: a broken consume stream (rebalance, broker restart)
+        # logs and resumes; it must never kill the process, because risk
+        # analysis silently stopping is the worst failure this worker has.
+        while True:
+            try:
+                async for record in consumer:
+                    try:
+                        await handle_raw(
+                            record.value,
+                            session_factory,
+                            producer,
+                            gateway,
+                            source_topic=topic,
+                            max_attempts=settings.consumer_max_attempts,
+                        )
+                        await consumer.commit()
+                    except Exception as exc:
+                        # handle_raw already dead letters processing errors;
+                        # this catches commit and DLQ produce failures.
+                        logger.error("consumer_iteration_failed", error_type=type(exc).__name__)
+                        await asyncio.sleep(1.0)
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                logger.error("consumer_stream_failed", error_type=type(exc).__name__)
+                await asyncio.sleep(2.0)
     finally:
         await consumer.stop()
         await producer.stop()

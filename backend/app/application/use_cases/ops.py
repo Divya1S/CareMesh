@@ -41,6 +41,17 @@ class OpsService:
         row = await self._ai_requests.get_for_org(actor.organization_id, request_id)
         if row is None:
             raise NotFoundError("AI request not found")
+        # The stored prompt can contain verbatim conversation content, so
+        # reading it is itself an audited act, like review and claim
+        # decisions are.
+        await self._audit.record(
+            action="ai_request_inspected",
+            organization_id=actor.organization_id,
+            actor_id=actor.id,
+            resource_type="ai_request",
+            resource_id=request_id,
+            detail={"prompt_name": row.prompt_name},
+        )
         return row
 
     async def list_events(self, actor: User, limit: int):

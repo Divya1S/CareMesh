@@ -237,6 +237,7 @@ export const decideReview = (
   );
 
 export type StreamEvent =
+  | { type: "start"; simulated: boolean }
   | { type: "saved"; message: Message }
   | { type: "tool"; name: string; summary: string }
   | { type: "delta"; text: string }

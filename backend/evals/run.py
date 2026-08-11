@@ -125,21 +125,23 @@ async def run_dira_suite() -> tuple[dict, InMemoryAIRequestLog]:
     gateway, log = make_gateway()
     results = []
     for case in dira_suite.CASES:
-        offer_tools = "expect_tool" in case
+        # Tools are offered on every case, so every case also asserts tool
+        # behavior: cases without expect_tool must use none (an injection or
+        # safety reply that detours into a tool is a failure, not a gap the
+        # suite cannot see).
         completion = await gateway.complete(
             prompt_name="dira_reply",
             user_messages=[LLMMessage("user", case["message"])],
             organization_id=uuid4(),
-            tools=_stub_tools() if offer_tools else (),
+            tools=_stub_tools(),
         )
         violations = dira_suite.check_reply(case, completion.text)
-        if offer_tools:
-            used = [activity.name for activity in completion.tool_activity]
-            expected = case["expect_tool"]
-            if expected is None and used:
-                violations.append(f"used tools on a crisis message: {used}")
-            elif expected is not None and used != [expected]:
-                violations.append(f"expected tool {expected}, used {used}")
+        used = [activity.name for activity in completion.tool_activity]
+        expected = case.get("expect_tool")
+        if expected is None and used:
+            violations.append(f"used tools where none were expected: {used}")
+        elif expected is not None and used != [expected]:
+            violations.append(f"expected tool {expected}, used {used}")
         results.append(
             {
                 "id": case["id"],
@@ -217,6 +219,11 @@ async def run(dataset: str) -> int:
         print_suite(name, suite)
         if suite["passed"] != suite["total"]:
             all_passed = False
+    # Enforced, not decorative: eval runs must never spend real API money
+    # or gate on a nondeterministic provider.
+    if report["usage"].get("ai_calls", 0) and not report["usage"].get("simulated_only", True):
+        print("FAIL: eval run touched a non simulated provider")
+        all_passed = False
     # Deterministic provider and corpus: anything below 100% is a regression.
     return 0 if all_passed else 1
 

@@ -50,10 +50,16 @@ async def relay_once(session: AsyncSession, producer, topic_prefix: str, batch_s
             payload=row.payload,
         )
         topic = topic_for(topic_prefix, row.event_type)
-        await producer.send_and_wait(
-            topic,
-            envelope.model_dump_json().encode(),
-            key=str(row.organization_id).encode(),
+        # Bounded per send: an unhealthy broker must not leave this
+        # transaction idle holding FOR UPDATE locks on the batch (which
+        # would also block ops republish on those rows).
+        await asyncio.wait_for(
+            producer.send_and_wait(
+                topic,
+                envelope.model_dump_json().encode(),
+                key=str(row.organization_id).encode(),
+            ),
+            timeout=10.0,
         )
         logger.info(
             "event_published",
@@ -81,8 +87,16 @@ async def run_relay(
     batch_size: int,
 ) -> None:
     while True:
-        async with session_factory() as session:
-            published = await relay_once(session, producer, topic_prefix, batch_size)
+        # A transient failure (Postgres restart, broker rebalance) logs and
+        # backs off; it must never kill the relay process, because the API
+        # keeps accepting messages and the outbox keeps growing either way.
+        try:
+            async with session_factory() as session:
+                published = await relay_once(session, producer, topic_prefix, batch_size)
+        except Exception as exc:
+            logger.error("relay_iteration_failed", error_type=type(exc).__name__)
+            await asyncio.sleep(max(poll_seconds, 2.0))
+            continue
         if published == 0:
             await asyncio.sleep(poll_seconds)
 

@@ -15,19 +15,20 @@ async def login(
     limiter: RateLimiterDep,
     settings: SettingsDep,
 ) -> TokenPairResponse:
-    # Brute force protection, keyed by client address and target account so
-    # one noisy address cannot lock everyone out.
+    # Brute force protection: two independent buckets, so spraying many
+    # accounts from one address hits the address limit and spraying one
+    # account from many addresses hits the account limit. A single
+    # composite key would enforce neither.
     client = request.client.host if request.client else "unknown"
-    decision = await limiter.allow(
-        f"login:{client}:{body.email.lower()}",
-        settings.login_attempts_per_minute,
-        window_seconds=60,
-    )
-    if not decision.allowed:
-        raise RateLimitedError(
-            "Too many sign in attempts. Wait a minute and try again.",
-            retry_after_seconds=decision.retry_after_seconds,
+    for bucket in (f"login:addr:{client}", f"login:acct:{body.email.lower()}"):
+        decision = await limiter.allow(
+            bucket, settings.login_attempts_per_minute, window_seconds=60
         )
+        if not decision.allowed:
+            raise RateLimitedError(
+                "Too many sign in attempts. Wait a minute and try again.",
+                retry_after_seconds=decision.retry_after_seconds,
+            )
     pair = await auth.login(body.email, body.password)
     return TokenPairResponse(
         access_token=pair.access_token,

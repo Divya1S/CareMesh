@@ -26,3 +26,7 @@ class ToolResult:
 class Tool:
     definition: ToolDef
     run: Callable[[dict], Awaitable[ToolResult]]
+    # True for tools that write (rows, events). A failed mutating tool has
+    # likely poisoned the transaction, so the gateway aborts the reply
+    # instead of degrading over a broken session.
+    mutates: bool = False

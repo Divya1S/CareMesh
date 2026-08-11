@@ -27,7 +27,7 @@ an evaluation and observability layer that gates every change.
 | Capability | Where it lives |
 |---|---|
 | **LLM app engineering** | A central AI Gateway (`backend/app/application/ai/gateway.py`): prompt registry with versions, structured output validation with bounded retry, timeouts, streamed replies over SSE, and full auditing of every call (model, prompt version, tokens, cost, latency, tool calls, outcome) |
-| **Agentic tool calling** | A bounded tool loop with allow listed, tenant scoped tools (ADR 0007): Dira searches the resource library (agentic RAG with citations) and files appointment requests as real workflows the care team acknowledges; crisis disclosures bypass tools, gated by evals |
+| **Agentic tool calling** | A bounded tool loop with allow listed, tenant scoped tools (ADR 0007): Dira searches the resource library (agentic RAG with citations) and files appointment requests as real, idempotent workflows the care team acknowledges; crisis disclosures get zero tools, enforced in application code for any provider and gated by evals |
 | **MCP server** | `backend/mcp_server/`: a stdio MCP server any MCP client (Claude Desktop, Claude Code) can connect to, exposing two allow listed read only tools scoped to one organization; tested through a real MCP client round trip |
 | **RAG that is real** | Versioned documents, paragraph chunking with overlap, embeddings in pgvector with an HNSW index, tenant scoped cosine search plus keyword rerank, grounded answers with visible cited vs retrieved sources, and a stored retrieval trail per question |
 | **Evals as a gate** | Three deterministic suites (risk classification with escalation precision and recall, Dira reply safety properties, retrieval hit@k and MRR), run in CI and locally, gated at 100 percent; results stored with model and dataset versions plus latency, token, and cost usage |
@@ -81,9 +81,9 @@ workflow, AI call, and event, including replaying events safely.
 
 | Metric | Value |
 |---|---|
-| Backend tests (unit + integration against real Postgres, Redis, Redpanda) | 114 |
+| Backend tests (unit + integration against real Postgres, Redis, Redpanda) | 118 |
 | Frontend tests | 13 |
-| Gated eval cases (risk, Dira safety and tool use, retrieval) | 23/23 |
+| Eval cases (risk, Dira safety and tool use, retrieval) | 23 (20 gated under the default lexical embeddings, all 23 under fastembed) |
 | Escalation precision / recall on the eval set | 1.0 / 1.0 |
 | Retrieval hit@1 / MRR: lexical embeddings (default) | 0.5 / 0.583 |
 | Retrieval hit@1 / MRR: semantic embeddings (fastembed, local) | 1.0 / 1.0 |
@@ -92,7 +92,7 @@ workflow, AI call, and event, including replaying events safely.
 | Total AI spend across all development (including the live Gemini check) | $0.00 |
 | External paid services required | none |
 
-Latency numbers come from `scripts/loadtest.py` run against the
+Latency numbers come from `backend/scripts/loadtest.py` run against the
 containerized backend on a laptop; the script deliberately stays inside
 the platform's own rate limits (5 logins per minute, 20 AI requests per
 user per minute) because the limits are part of the system under test.
@@ -110,11 +110,15 @@ Prereqs: Docker, uv, Node 20+.
 docker compose up -d                    # Postgres (pgvector), Redis, Redpanda
 cd backend && uv sync && uv run alembic upgrade head
 uv run python -m scripts.seed           # demo org, users, resource documents
-uv run uvicorn app.main:app --port 8000
-# separate terminals:
-uv run python -m app.workers.relay
-uv run python -m app.workers.conversation_consumer
-cd ../frontend && npm install && npm run dev
+```
+
+Then one process per terminal:
+
+```bash
+cd backend && uv run uvicorn app.main:app --port 8000
+cd backend && uv run python -m app.workers.relay
+cd backend && uv run python -m app.workers.conversation_consumer
+cd frontend && npm install && npm run dev
 ```
 
 Then open http://localhost:3000 and sign in (password `caremesh-demo`):
@@ -132,7 +136,7 @@ One command gates everything (lint, migrations, tests, evals):
 
 ```bash
 ./scripts/verify.sh
-# browser journey across four roles:
+# browser journey across three roles (student, therapist, ops):
 ./scripts/e2e.sh
 # observability stack (off by default): Prometheus :9090, Grafana :3001
 docker compose --profile observability up -d
@@ -188,8 +192,9 @@ integration test drives the server through a real MCP client round trip.
   plus a key) plugs into the same gateway with tool calling, structured
   output, and streaming; `uv run python -m scripts.live_check` is an opt
   in script that proves a real reply, a validated risk classification,
-  and a stream all land in the audit trail with `simulated=false`. It is
-  never part of verify.sh or CI. Anthropic and OpenAI adapters would be
+  and a stream all flow through the gateway and produce audit entries
+  with `simulated=false` (printed by the script, which uses its own log
+  sink rather than the database). It is never part of verify.sh or CI. Anthropic and OpenAI adapters would be
   the same shape but have no free tier, so an Ollama adapter for local
   models is the documented next provider.
 - **Two embedding providers, measured against each other.** The default
@@ -230,6 +235,7 @@ paid observability (tracing spans across the event pipeline).
 | [docs/API.md](docs/API.md) | API conventions and surfaces |
 | [docs/LOCAL_DEVELOPMENT.md](docs/LOCAL_DEVELOPMENT.md) | Everything about running it |
 | [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | Paper cloud mapping, clearly never deployed |
+| [docs/FINAL_REVIEW.md](docs/FINAL_REVIEW.md) | The closing six perspective review: findings, fixes, accepted gaps |
 | [docs/DESIGN.md](docs/DESIGN.md) | The design system and its rules |
 | [docs/adr/](docs/adr/) | Architecture decision records |
 

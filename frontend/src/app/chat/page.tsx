@@ -37,6 +37,10 @@ export default function ChatPage() {
   const [streamText, setStreamText] = useState("");
   const [toolLines, setToolLines] = useState<string[]>([]);
   const [streamingActive, setStreamingActive] = useState(false);
+  // Provenance of the in flight stream, from the stream's start event.
+  // Defaults to true: wrongly labeling real output SIMULATED is the safe
+  // direction; the badge is never asserted from nothing.
+  const [streamSimulated, setStreamSimulated] = useState(true);
   const [loaded, setLoaded] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
 
@@ -92,10 +96,13 @@ export default function ChatPage() {
     setBusy(true);
     setStreamText("");
     setToolLines([]);
+    setStreamSimulated(true);
     setStreamingActive(true);
     try {
       await streamMessage(selectedId, draft.trim(), (streamEvent) => {
-        if (streamEvent.type === "saved") {
+        if (streamEvent.type === "start") {
+          setStreamSimulated(streamEvent.simulated);
+        } else if (streamEvent.type === "saved") {
           setMessages((prev) => [...prev, streamEvent.message]);
           setDraft("");
         } else if (streamEvent.type === "tool") {
@@ -269,7 +276,7 @@ export default function ChatPage() {
                 </p>
               ))}
               {streamText ? (
-                <ChatBubble sender="dira" simulated>
+                <ChatBubble sender="dira" simulated={streamSimulated}>
                   {streamText}
                 </ChatBubble>
               ) : (
