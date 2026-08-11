@@ -52,4 +52,7 @@ def dlq_topic_for(topic: str) -> str:
 _DOMAIN_BY_EVENT = {
     "PatientMessageCreated": "conversation",
     "AIResponseGenerated": "ai",
+    "RiskSignalDetected": "risk",
+    "RiskReviewRequired": "risk",
+    "HumanReviewCompleted": "risk",
 }

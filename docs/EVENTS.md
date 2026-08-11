@@ -60,3 +60,36 @@ This file documents reality only; events land here when they ship.
   `simulated`. No content.
 - **Failure behavior:** standard outbox delivery; no consumer side effects
   yet.
+
+### RiskSignalDetected, v1
+
+- **Purpose:** the Risk Signal agent classified a patient message. Emitted
+  for every analyzed message, escalated or not.
+- **Producer:** `RiskAnalysisService` inside the conversation consumer, in
+  the same transaction as the signal row and the idempotency mark.
+- **Topic:** `caremesh.risk.risk_signal_detected`
+- **Payload:** `risk_signal_id`, `message_id`, `conversation_id`,
+  `patient_id`, `category`, `severity`, `escalated`. The evidence quote
+  stays in the database, never in events.
+- **Consumers:** none yet (ops and evaluation phases).
+
+### RiskReviewRequired, v1
+
+- **Purpose:** deterministic thresholds decided a human must review a
+  signal; a Risk Escalation workflow was opened in `pending_review`.
+- **Producer:** `RiskAnalysisService`, same transaction as the workflow row.
+- **Topic:** `caremesh.risk.risk_review_required`
+- **Payload:** `workflow_id`, `risk_signal_id`, `patient_id`, `severity`.
+- **Consumers:** none yet (notification phases subscribe later; the review
+  queue reads Postgres directly).
+
+### HumanReviewCompleted, v1
+
+- **Purpose:** a therapist accepted, edited, or rejected a signal. This is
+  the clinician feedback stream that later feeds evaluation.
+- **Producer:** `ReviewService.decide`, same transaction as the review row
+  and the workflow transition to `resolved`.
+- **Topic:** `caremesh.risk.human_review_completed`
+- **Payload:** `workflow_id`, `risk_signal_id`, `reviewer_id`, `decision`,
+  `severity_override`.
+- **Consumers:** none yet (evaluation phase).

@@ -11,6 +11,7 @@ from app.application.ai.gateway import AIGateway
 from app.application.errors import UnauthorizedError
 from app.application.use_cases.auth import AuthService
 from app.application.use_cases.conversations import ConversationService
+from app.application.use_cases.reviews import ReviewService
 from app.domain.entities import User
 from app.infrastructure.ai.factory import create_provider
 from app.infrastructure.repositories import (
@@ -20,7 +21,9 @@ from app.infrastructure.repositories import (
     SqlConversationRepository,
     SqlEventOutbox,
     SqlMessageRepository,
+    SqlRiskRepository,
     SqlUserRepository,
+    SqlWorkflowRepository,
 )
 from app.infrastructure.security import Argon2PasswordHasher, JwtTokenService
 from app.infrastructure.settings import Settings, get_settings
@@ -92,6 +95,20 @@ def get_correlation_id(request: Request) -> str | None:
 
 
 CorrelationIdDep = Annotated[str | None, Depends(get_correlation_id)]
+
+
+def get_review_service(session: SessionDep) -> ReviewService:
+    return ReviewService(
+        workflows=SqlWorkflowRepository(session),
+        risks=SqlRiskRepository(session),
+        assignments=SqlCareAssignmentRepository(session),
+        users=SqlUserRepository(session),
+        messages=SqlMessageRepository(session),
+        outbox=SqlEventOutbox(session),
+    )
+
+
+ReviewServiceDep = Annotated[ReviewService, Depends(get_review_service)]
 
 
 async def get_current_user(request: Request, session: SessionDep, tokens: TokenServiceDep) -> User:

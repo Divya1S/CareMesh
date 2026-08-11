@@ -10,6 +10,8 @@ export type TokenPair = components["schemas"]["TokenPairResponse"];
 export type Me = components["schemas"]["MeResponse"];
 export type Conversation = components["schemas"]["ConversationResponse"];
 export type Message = components["schemas"]["MessageResponse"];
+export type ReviewItem = components["schemas"]["ReviewQueueItemResponse"];
+export type ReviewDecision = components["schemas"]["ReviewDecision"];
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -93,6 +95,26 @@ export const createConversation = (title: string) =>
 
 export const listMessages = (conversationId: string) =>
   request<Message[]>(`/api/v1/conversations/${conversationId}/messages?limit=100`);
+
+export const listReviews = () => request<ReviewItem[]>("/api/v1/reviews");
+
+export const decideReview = (
+  workflowId: string,
+  decision: ReviewDecision,
+  severityOverride?: number,
+  note?: string,
+) =>
+  request<{ workflow_id: string; state: string; decision: ReviewDecision }>(
+    `/api/v1/reviews/${workflowId}`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        decision,
+        severity_override: severityOverride ?? null,
+        note: note ?? "",
+      }),
+    },
+  );
 
 export const postMessage = (conversationId: string, content: string) =>
   request<Message>(`/api/v1/conversations/${conversationId}/messages`, {

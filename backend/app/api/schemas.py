@@ -6,6 +6,7 @@ from uuid import UUID
 from pydantic import BaseModel, EmailStr, Field
 
 from app.domain.entities import Role, SenderType
+from app.domain.risk import ReviewDecision, RiskCategory
 
 
 class LoginRequest(BaseModel):
@@ -45,6 +46,34 @@ class ConversationResponse(BaseModel):
 
 class MessageCreateRequest(BaseModel):
     content: str = Field(min_length=1, max_length=8000)
+
+
+class ReviewQueueItemResponse(BaseModel):
+    workflow_id: UUID
+    risk_signal_id: UUID
+    patient_name: str
+    message_content: str
+    category: RiskCategory
+    severity: int
+    confidence: float
+    evidence: str
+    # AI provenance for the AIFrame in the workspace.
+    model: str
+    prompt_version: int
+    simulated: bool
+    created_at: datetime
+
+
+class ReviewDecisionRequest(BaseModel):
+    decision: ReviewDecision
+    severity_override: int | None = Field(default=None, ge=0, le=3)
+    note: str = Field(default="", max_length=2000)
+
+
+class ReviewDecisionResponse(BaseModel):
+    workflow_id: UUID
+    state: str
+    decision: ReviewDecision
 
 
 class MessageResponse(BaseModel):

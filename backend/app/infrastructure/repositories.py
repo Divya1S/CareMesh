@@ -16,6 +16,9 @@ from app.domain.entities import (
     User,
 )
 from app.domain.events import DomainEvent
+from app.domain.ids import uuid7
+from app.domain.risk import RiskReview, RiskSignal
+from app.domain.workflows import WorkflowInstance, WorkflowType
 from app.infrastructure.models import (
     AIRequestRow,
     AuthSessionRow,
@@ -24,7 +27,11 @@ from app.infrastructure.models import (
     DomainEventLogRow,
     MessageRow,
     OrganizationRow,
+    RiskReviewRow,
+    RiskSignalRow,
     UserRow,
+    WorkflowInstanceRow,
+    WorkflowTransitionRow,
 )
 
 
@@ -216,6 +223,10 @@ class SqlMessageRepository:
             )
         )
 
+    async def get_by_id(self, message_id: UUID) -> Message | None:
+        row = await self._session.get(MessageRow, message_id)
+        return _message(row) if row else None
+
     async def list_for_conversation(
         self, conversation_id: UUID, limit: int, offset: int
     ) -> list[Message]:
@@ -280,6 +291,184 @@ class SqlAIRequestLog:
                 )
             )
             await session.commit()
+
+
+def _risk_signal(row: RiskSignalRow) -> RiskSignal:
+    return RiskSignal(
+        id=row.id,
+        organization_id=row.organization_id,
+        conversation_id=row.conversation_id,
+        message_id=row.message_id,
+        patient_id=row.patient_id,
+        category=row.category,
+        severity=row.severity,
+        confidence=row.confidence,
+        evidence=row.evidence,
+        model=row.model,
+        prompt_version=row.prompt_version,
+        ai_request_id=row.ai_request_id,
+        simulated=row.simulated,
+        created_at=row.created_at,
+    )
+
+
+class SqlRiskRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def add_signal(self, signal: RiskSignal) -> None:
+        self._session.add(
+            RiskSignalRow(
+                id=signal.id,
+                organization_id=signal.organization_id,
+                conversation_id=signal.conversation_id,
+                message_id=signal.message_id,
+                patient_id=signal.patient_id,
+                category=signal.category,
+                severity=signal.severity,
+                confidence=signal.confidence,
+                evidence=signal.evidence,
+                model=signal.model,
+                prompt_version=signal.prompt_version,
+                ai_request_id=signal.ai_request_id,
+                simulated=signal.simulated,
+                created_at=signal.created_at,
+            )
+        )
+
+    async def get_signal(self, signal_id: UUID) -> RiskSignal | None:
+        row = await self._session.get(RiskSignalRow, signal_id)
+        return _risk_signal(row) if row else None
+
+    async def add_review(self, review: RiskReview) -> None:
+        self._session.add(
+            RiskReviewRow(
+                id=review.id,
+                organization_id=review.organization_id,
+                risk_signal_id=review.risk_signal_id,
+                reviewer_id=review.reviewer_id,
+                decision=review.decision,
+                severity_override=review.severity_override,
+                note=review.note,
+                created_at=review.created_at,
+            )
+        )
+
+
+class SqlWorkflowRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def create(
+        self,
+        *,
+        workflow_id: UUID,
+        organization_id: UUID,
+        workflow_type: WorkflowType,
+        state: str,
+        subject_id: UUID,
+        correlation_id: str | None,
+        reason: str,
+        now: datetime,
+    ) -> None:
+        self._session.add(
+            WorkflowInstanceRow(
+                id=workflow_id,
+                organization_id=organization_id,
+                workflow_type=workflow_type,
+                state=state,
+                subject_id=subject_id,
+                correlation_id=correlation_id,
+                created_at=now,
+                updated_at=now,
+            )
+        )
+        self._session.add(
+            WorkflowTransitionRow(
+                id=uuid7(),
+                workflow_id=workflow_id,
+                from_state=None,
+                to_state=state,
+                actor="system",
+                reason=reason,
+                occurred_at=now,
+            )
+        )
+
+    async def get_by_id(self, workflow_id: UUID) -> WorkflowInstance | None:
+        row = await self._session.get(WorkflowInstanceRow, workflow_id)
+        if row is None:
+            return None
+        return WorkflowInstance(
+            id=row.id,
+            organization_id=row.organization_id,
+            workflow_type=row.workflow_type,
+            state=row.state,
+            subject_id=row.subject_id,
+            correlation_id=row.correlation_id,
+            created_at=row.created_at,
+            updated_at=row.updated_at,
+        )
+
+    async def transition(
+        self,
+        *,
+        workflow_id: UUID,
+        from_state: str,
+        to_state: str,
+        actor: str,
+        reason: str,
+        now: datetime,
+    ) -> None:
+        await self._session.execute(
+            update(WorkflowInstanceRow)
+            .where(WorkflowInstanceRow.id == workflow_id)
+            .values(state=to_state, updated_at=now)
+        )
+        self._session.add(
+            WorkflowTransitionRow(
+                id=uuid7(),
+                workflow_id=workflow_id,
+                from_state=from_state,
+                to_state=to_state,
+                actor=actor,
+                reason=reason,
+                occurred_at=now,
+            )
+        )
+
+    async def list_pending_risk(
+        self, organization_id: UUID, patient_ids: list[UUID]
+    ) -> list[tuple[WorkflowInstance, RiskSignal]]:
+        rows = await self._session.execute(
+            select(WorkflowInstanceRow, RiskSignalRow)
+            .join(RiskSignalRow, WorkflowInstanceRow.subject_id == RiskSignalRow.id)
+            .where(
+                WorkflowInstanceRow.organization_id == organization_id,
+                WorkflowInstanceRow.workflow_type == WorkflowType.RISK_ESCALATION,
+                WorkflowInstanceRow.state == "pending_review",
+                RiskSignalRow.patient_id.in_(patient_ids),
+            )
+            .order_by(RiskSignalRow.severity.desc(), WorkflowInstanceRow.created_at.asc())
+        )
+        result = []
+        for workflow_row, signal_row in rows:
+            result.append(
+                (
+                    WorkflowInstance(
+                        id=workflow_row.id,
+                        organization_id=workflow_row.organization_id,
+                        workflow_type=workflow_row.workflow_type,
+                        state=workflow_row.state,
+                        subject_id=workflow_row.subject_id,
+                        correlation_id=workflow_row.correlation_id,
+                        created_at=workflow_row.created_at,
+                        updated_at=workflow_row.updated_at,
+                    ),
+                    _risk_signal(signal_row),
+                )
+            )
+        return result
 
 
 class SqlCareAssignmentRepository:

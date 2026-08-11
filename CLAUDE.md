@@ -14,7 +14,8 @@ Honesty rules that must never be broken (repeated here because they carry weight
 
 ## Current state
 
-- **Phase:** S5, Dira minimal, complete (gate passed 2026-08-10). Next: S6, risk signal, escalation workflow, and the minimal clinician workspace
+- **Phase:** S6, risk signal and clinician review, complete (gate passed 2026-08-10). Next: S7, the minimal ops console, the eval runner, and the Playwright E2E journey, which closes the vertical slice
+- **Risk flow:** the conversation consumer runs the Risk Signal agent (gateway, `risk_signal` v1) on patient messages; deterministic thresholds in `domain/risk.py` open a Risk Escalation workflow; therapists review at `/clinician` with accept, edit, or reject; everything is evented and the workflow history is append only
 - **Dira:** patient messages get a synchronous reply through the gateway (ADR 0005), persisted as a `dira` message with `ai_request_id` and `simulated` provenance columns, `AIResponseGenerated` emitted to the outbox, SIMULATED chip rendered in the chat
 - **AI:** all LLM calls go through `AIGateway` (`app/application/ai/gateway.py`): prompt registry with versions, structured output validation with bounded retry, timeout, and every call logged to `ai_requests` with the simulated flag. Provider chosen by `LLM_PROVIDER` env var; `fake` is the default (deterministic scenarios, `# SIMULATED`, injectable failures via `[[fail:timeout|malformed|error]]` markers)
 - **Events:** outbox in `domain_event_log`, relay worker, idempotent consumer with DLQ. See `docs/EVENTS.md`. Workers run on the host in dev: `uv run python -m app.workers.relay` and `uv run python -m app.workers.conversation_consumer`

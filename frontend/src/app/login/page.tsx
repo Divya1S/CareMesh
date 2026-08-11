@@ -5,7 +5,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Field } from "@/components/ui/Field";
-import { ApiError, login } from "@/lib/api";
+import { ApiError, getMe, login } from "@/lib/api";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -20,7 +20,8 @@ export default function LoginPage() {
     setBusy(true);
     try {
       await login(email, password);
-      router.replace("/chat");
+      const me = await getMe();
+      router.replace(me.role === "therapist" ? "/clinician" : "/chat");
     } catch (err) {
       setError(
         err instanceof ApiError && err.status === 401

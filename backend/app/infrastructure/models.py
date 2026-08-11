@@ -19,6 +19,8 @@ from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 from app.domain.entities import Role, SenderType
+from app.domain.risk import ReviewDecision, RiskCategory
+from app.domain.workflows import WorkflowType
 
 
 class Base(DeclarativeBase):
@@ -158,6 +160,79 @@ class AIRequestRow(Base):
     request_messages: Mapped[dict] = mapped_column(JSONB, nullable=False)
     response_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = _created_at()
+
+
+class RiskSignalRow(Base):
+    """AI detected signals. Append only; the human decision lives in
+    risk_reviews, never as a mutation of the signal."""
+
+    __tablename__ = "risk_signals"
+    __table_args__ = (Index("ix_risk_signals_org_created", "organization_id", "created_at"),)
+
+    id: Mapped[UUID] = _uuid_pk()
+    organization_id: Mapped[UUID] = mapped_column(ForeignKey("organizations.id"), nullable=False)
+    conversation_id: Mapped[UUID] = mapped_column(ForeignKey("conversations.id"), nullable=False)
+    message_id: Mapped[UUID] = mapped_column(ForeignKey("messages.id"), nullable=False)
+    patient_id: Mapped[UUID] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    category: Mapped[RiskCategory] = mapped_column(
+        Enum(RiskCategory, name="risk_category"), nullable=False
+    )
+    severity: Mapped[int] = mapped_column(nullable=False)
+    confidence: Mapped[float] = mapped_column(nullable=False)
+    evidence: Mapped[str] = mapped_column(Text, nullable=False)
+    model: Mapped[str] = mapped_column(String(100), nullable=False)
+    prompt_version: Mapped[int] = mapped_column(nullable=False)
+    ai_request_id: Mapped[UUID] = mapped_column(ForeignKey("ai_requests.id"), nullable=False)
+    simulated: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    created_at: Mapped[datetime] = _created_at()
+
+
+class RiskReviewRow(Base):
+    __tablename__ = "risk_reviews"
+
+    id: Mapped[UUID] = _uuid_pk()
+    organization_id: Mapped[UUID] = mapped_column(ForeignKey("organizations.id"), nullable=False)
+    risk_signal_id: Mapped[UUID] = mapped_column(
+        ForeignKey("risk_signals.id"), nullable=False, unique=True
+    )
+    reviewer_id: Mapped[UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    decision: Mapped[ReviewDecision] = mapped_column(
+        Enum(ReviewDecision, name="review_decision"), nullable=False
+    )
+    severity_override: Mapped[int | None] = mapped_column(nullable=True)
+    note: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    created_at: Mapped[datetime] = _created_at()
+
+
+class WorkflowInstanceRow(Base):
+    __tablename__ = "workflow_instances"
+    __table_args__ = (Index("ix_workflow_instances_org_state", "organization_id", "state"),)
+
+    id: Mapped[UUID] = _uuid_pk()
+    organization_id: Mapped[UUID] = mapped_column(ForeignKey("organizations.id"), nullable=False)
+    workflow_type: Mapped[WorkflowType] = mapped_column(
+        Enum(WorkflowType, name="workflow_type"), nullable=False
+    )
+    state: Mapped[str] = mapped_column(String(50), nullable=False)
+    subject_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    correlation_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[datetime] = _created_at()
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class WorkflowTransitionRow(Base):
+    """Append only transition history: who moved a workflow, when, and why."""
+
+    __tablename__ = "workflow_transitions"
+    __table_args__ = (Index("ix_workflow_transitions_workflow", "workflow_id", "occurred_at"),)
+
+    id: Mapped[UUID] = _uuid_pk()
+    workflow_id: Mapped[UUID] = mapped_column(ForeignKey("workflow_instances.id"), nullable=False)
+    from_state: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    to_state: Mapped[str] = mapped_column(String(50), nullable=False)
+    actor: Mapped[str] = mapped_column(String(64), nullable=False)
+    reason: Mapped[str] = mapped_column(String(300), nullable=False)
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
 class CareAssignmentRow(Base):

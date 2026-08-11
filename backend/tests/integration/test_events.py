@@ -9,12 +9,14 @@ from datetime import UTC, datetime
 import pytest
 from sqlalchemy import select
 
+from app.application.ai.gateway import AIGateway
 from app.domain.events import patient_message_created
+from app.infrastructure.ai.fake_provider import FakeLLMProvider
 from app.infrastructure.events.kafka import create_consumer, create_producer
 from app.infrastructure.events.schemas import EventEnvelope, dlq_topic_for, topic_for
 from app.infrastructure.models import DomainEventLogRow
-from app.infrastructure.repositories import SqlEventOutbox
-from app.workers.conversation_consumer import handle_raw
+from app.infrastructure.repositories import SqlAIRequestLog, SqlEventOutbox
+from app.workers.conversation_consumer import handle_raw, process_envelope
 from app.workers.relay import relay_once
 
 pytestmark = pytest.mark.integration
@@ -105,17 +107,30 @@ async def test_relay_publishes_and_marks_published(app, seeded):
     assert envelope.correlation_id == event.correlation_id
 
 
+def make_test_gateway(app) -> AIGateway:
+    return AIGateway(
+        FakeLLMProvider(), SqlAIRequestLog(app.state.session_factory), timeout_seconds=5.0
+    )
+
+
 async def test_consumer_is_idempotent(app, seeded):
-    envelope = EventEnvelope.from_domain(make_event(seeded["org_a"].id))
-    raw = envelope.model_dump_json().encode()
-
-    class NoProducer:
-        async def send_and_wait(self, *a, **k):
-            raise AssertionError("valid events must not be dead lettered")
-
-    factory = app.state.session_factory
-    assert await handle_raw(raw, factory, NoProducer(), TOPIC, 3) == "processed"
-    assert await handle_raw(raw, factory, NoProducer(), TOPIC, 3) == "duplicate"
+    # A clinician sender event carries no risk analysis side effects, so this
+    # isolates the idempotency mark itself.
+    event = patient_message_created(
+        message_id=uuid.uuid4(),
+        conversation_id=uuid.uuid4(),
+        patient_id=uuid.uuid4(),
+        sender_type="clinician",
+        organization_id=seeded["org_a"].id,
+        occurred_at=datetime.now(UTC),
+        correlation_id="idem-1",
+    )
+    envelope = EventEnvelope.from_domain(event)
+    gateway = make_test_gateway(app)
+    async with app.state.session_factory() as session:
+        assert await process_envelope(envelope, session, gateway) == "processed"
+    async with app.state.session_factory() as session:
+        assert await process_envelope(envelope, session, gateway) == "duplicate"
 
 
 async def test_malformed_message_goes_to_dlq(app, seeded):
@@ -123,7 +138,14 @@ async def test_malformed_message_goes_to_dlq(app, seeded):
     producer = create_producer(BOOTSTRAP)
     await producer.start()
     try:
-        outcome = await handle_raw(marker, app.state.session_factory, producer, TOPIC, 3)
+        outcome = await handle_raw(
+            marker,
+            app.state.session_factory,
+            producer,
+            make_test_gateway(app),
+            source_topic=TOPIC,
+            max_attempts=3,
+        )
     finally:
         await producer.stop()
     assert outcome == "dlq"

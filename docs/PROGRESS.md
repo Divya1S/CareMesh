@@ -5,9 +5,9 @@
 
 ## Current phase
 
-**S5, Dira minimal: COMPLETE. Gate passed on 2026-08-10.** Next phase is
-**S6: the Risk Signal agent, deterministic thresholds, the Risk Escalation
-workflow, and a minimal clinician review queue.**
+**S6, risk signal and clinician review: COMPLETE. Gate passed on 2026-08-10.**
+Next phase is **S7: the minimal ops console, the eval runner with a golden
+dataset, and the Playwright E2E journey. S7 closes the vertical slice.**
 Phase 0 was approved by the human on 2026-08-10 and the approved plan is
 `docs/PHASE_0_PROPOSAL.md` (roadmap in section 11). All frontend work follows
 `docs/DESIGN.md` (added by the human; authoritative).
@@ -123,9 +123,37 @@ Phase 0 was approved by the human on 2026-08-10 and the approved plan is
     header carries the persistent disclosure that Dira is an AI companion,
     not a therapist.
 
+- 2026-08-10, S6 risk signal and clinician review, validated by
+  `./scripts/verify.sh` (64 backend and 13 frontend tests green) and a live
+  four process browser demo (API, relay, consumer, frontend): a student's
+  crisis message flowed through Redpanda into the Risk Signal agent, opened
+  a workflow, appeared in the therapist's review queue in the gold AI frame
+  with SIMULATED and severity labels, and was accepted with an audited
+  resolution. Zero console errors.
+  - Domain: `risk.py` (RiskSignal, RiskReview, deterministic
+    `escalation_required`: self harm and crisis always escalate, severity 2
+    and up escalates) and `workflows.py` (explicit state machine,
+    `validate_transition`, append only history). Tables and migration
+    `de7fe2fdc2ca`: risk_signals, risk_reviews (unique per signal),
+    workflow_instances, workflow_transitions.
+  - Consumer rework: idempotency mark and ALL effects (signal, workflow,
+    outbox events) commit in one transaction, so retries and duplicates are
+    safe; a failed analysis leaves no partial state (tested). Malformed AI
+    output dead letters after bounded retries (tested).
+  - Events: RiskSignalDetected, RiskReviewRequired, HumanReviewCompleted,
+    documented in docs/EVENTS.md. Evidence text never enters payloads.
+  - Review API: GET /api/v1/reviews (therapist, assigned patients only) and
+    POST /api/v1/reviews/{workflow_id} (accept, edit with severity override,
+    reject; terminal states refuse a second decision). Authorization tested:
+    unassigned therapist empty and 403, patient 403.
+  - Clinician UI at /clinician: queue items inside AIFrame with provenance,
+    severity as icon plus text (SeverityLabel), accept / edit / reject with
+    the frame transitioning to the rose approved state. Login now routes
+    therapists to /clinician.
+
 ## In flight
 
-- Nothing. S5 closed cleanly, working tree committed.
+- Nothing. S6 closed cleanly, working tree committed.
 
 ## Known limitations (intentional, coming in later phases)
 
@@ -139,25 +167,21 @@ Phase 0 was approved by the human on 2026-08-10 and the approved plan is
 - Chat refreshes messages on send only; live updates (polling or SSE) come
   with Dira in S5.
 
-## Next steps (S6, risk signal and escalation)
+## Next steps (S7, ops console and slice hardening)
 
-1. Risk analysis in the conversation consumer: on `PatientMessageCreated`
-   with sender patient, fetch the message content from Postgres, call the
-   gateway with `risk_signal` v1 and a Pydantic schema, and store a
-   `RiskSignal` row (category, severity, confidence, evidence, model and
-   prompt version, ai_request_id).
-2. Deterministic thresholds in domain code decide the outcome: below
-   threshold log only; at or above threshold create a Risk Escalation
-   `WorkflowInstance` (states per ADR 0004) and emit `RiskSignalDetected`
-   and `RiskReviewRequired`.
-3. Minimal clinician workspace: review queue for assigned patients
-   (severity icon plus label, never color alone), conversation view, and
-   accept / edit / reject on the AI signal inside the AIFrame per
-   DESIGN.md section 3, all audited and evented (`HumanReviewCompleted`).
-4. Failure paths tested: AI timeout, malformed output to DLQ, and the
-   fixture driven crisis scenario end to end.
-5. Gate: a crisis scenario message drives signal, workflow, and human
-   review end to end on the fake provider.
+1. Ops console at /ops (ops_admin role): workflow list with state and
+   transition history, AI request inspector (prompt, response, tokens,
+   cost, latency, status), outbox and DLQ visibility, and a workflow retry
+   action for failed instances. Ops endpoints under /api/v1/ops with
+   ops_admin authorization; graphite theme optional per DESIGN.md 4.7.
+2. Eval runner under evals/: a golden dataset of conversation scenarios
+   (normal, ambiguous, safety sensitive, injection, malformed) run against
+   the fake provider through the real gateway, asserting risk
+   classification and escalation decisions; wired into verify.sh.
+3. Playwright E2E journey as a repeatable script: student message, Dira
+   reply, risk signal, therapist review, ops visibility.
+4. Gate: the full vertical slice runs end to end on one laptop, free, and
+   verify.sh covers backend, frontend, and evals.
 
 ## Notes for the next session
 

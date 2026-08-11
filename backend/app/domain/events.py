@@ -29,6 +29,97 @@ class DomainEvent:
 
 PATIENT_MESSAGE_CREATED = "PatientMessageCreated"
 AI_RESPONSE_GENERATED = "AIResponseGenerated"
+RISK_SIGNAL_DETECTED = "RiskSignalDetected"
+RISK_REVIEW_REQUIRED = "RiskReviewRequired"
+HUMAN_REVIEW_COMPLETED = "HumanReviewCompleted"
+
+
+def risk_signal_detected(
+    *,
+    risk_signal_id: UUID,
+    message_id: UUID,
+    conversation_id: UUID,
+    patient_id: UUID,
+    category: str,
+    severity: int,
+    escalated: bool,
+    organization_id: UUID,
+    occurred_at: datetime,
+    correlation_id: str | None,
+    causation_id: str | None,
+) -> DomainEvent:
+    # Ids and classification only. The evidence quote stays in the database.
+    return DomainEvent(
+        event_type=RISK_SIGNAL_DETECTED,
+        schema_version=1,
+        occurred_at=occurred_at,
+        organization_id=organization_id,
+        correlation_id=correlation_id,
+        causation_id=causation_id,
+        payload={
+            "risk_signal_id": str(risk_signal_id),
+            "message_id": str(message_id),
+            "conversation_id": str(conversation_id),
+            "patient_id": str(patient_id),
+            "category": category,
+            "severity": severity,
+            "escalated": escalated,
+        },
+    )
+
+
+def risk_review_required(
+    *,
+    workflow_id: UUID,
+    risk_signal_id: UUID,
+    patient_id: UUID,
+    severity: int,
+    organization_id: UUID,
+    occurred_at: datetime,
+    correlation_id: str | None,
+    causation_id: str | None,
+) -> DomainEvent:
+    return DomainEvent(
+        event_type=RISK_REVIEW_REQUIRED,
+        schema_version=1,
+        occurred_at=occurred_at,
+        organization_id=organization_id,
+        correlation_id=correlation_id,
+        causation_id=causation_id,
+        payload={
+            "workflow_id": str(workflow_id),
+            "risk_signal_id": str(risk_signal_id),
+            "patient_id": str(patient_id),
+            "severity": severity,
+        },
+    )
+
+
+def human_review_completed(
+    *,
+    workflow_id: UUID,
+    risk_signal_id: UUID,
+    reviewer_id: UUID,
+    decision: str,
+    severity_override: int | None,
+    organization_id: UUID,
+    occurred_at: datetime,
+    correlation_id: str | None,
+) -> DomainEvent:
+    return DomainEvent(
+        event_type=HUMAN_REVIEW_COMPLETED,
+        schema_version=1,
+        occurred_at=occurred_at,
+        organization_id=organization_id,
+        correlation_id=correlation_id,
+        payload={
+            "workflow_id": str(workflow_id),
+            "risk_signal_id": str(risk_signal_id),
+            "reviewer_id": str(reviewer_id),
+            "decision": decision,
+            "severity_override": severity_override,
+        },
+    )
 
 
 def ai_response_generated(
