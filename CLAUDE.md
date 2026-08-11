@@ -14,7 +14,8 @@ Honesty rules that must never be broken (repeated here because they carry weight
 
 ## Current state
 
-- **Phase:** S3, events online, complete (gate passed 2026-08-10). Next: S4, the AI Gateway with the fake provider
+- **Phase:** S4, AI Gateway, complete (gate passed 2026-08-10). Next: S5, Dira minimal in the student app
+- **AI:** all LLM calls go through `AIGateway` (`app/application/ai/gateway.py`): prompt registry with versions, structured output validation with bounded retry, timeout, and every call logged to `ai_requests` with the simulated flag. Provider chosen by `LLM_PROVIDER` env var; `fake` is the default (deterministic scenarios, `# SIMULATED`, injectable failures via `[[fail:timeout|malformed|error]]` markers)
 - **Events:** outbox in `domain_event_log`, relay worker, idempotent consumer with DLQ. See `docs/EVENTS.md`. Workers run on the host in dev: `uv run python -m app.workers.relay` and `uv run python -m app.workers.conversation_consumer`
 - **Approved through:** Phase 0 was explicitly approved by the human on 2026-08-10 ("start")
 - **Working end to end:** compose stack (Postgres 5433, Redis, Redpanda), auth with JWT and rotating refresh tokens, RBAC plus resource level authorization, conversation and message CRUD, and the Next.js student app (welcome, login, chat) styled per `docs/DESIGN.md` with OpenAPI generated types. Backend 32 tests plus frontend 9 tests green through `./scripts/verify.sh`; browser flow smoke tested with Playwright

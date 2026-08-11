@@ -21,6 +21,12 @@ class Settings(BaseSettings):
 
     cors_origins: list[str] = ["http://localhost:3000"]
 
+    # ADR 0002: the fake provider is the default; real providers are opt in
+    # and are the only thing in this project that can cost money.
+    llm_provider: str = "fake"
+    llm_api_key: str | None = None
+    ai_timeout_seconds: float = 20.0
+
     kafka_bootstrap_servers: str = "localhost:9092"
     kafka_topic_prefix: str = "caremesh"
     relay_poll_seconds: float = 0.5

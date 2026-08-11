@@ -5,8 +5,8 @@
 
 ## Current phase
 
-**S3, events online: COMPLETE. Gate passed on 2026-08-10.** Next phase is
-**S4: the AI Gateway with the fake provider as the default.**
+**S4, AI Gateway: COMPLETE. Gate passed on 2026-08-10.** Next phase is
+**S5: Dira minimal, replying in the student app on the fake provider.**
 Phase 0 was approved by the human on 2026-08-10 and the approved plan is
 `docs/PHASE_0_PROPOSAL.md` (roadmap in section 11). All frontend work follows
 `docs/DESIGN.md` (added by the human; authoritative).
@@ -82,9 +82,32 @@ Phase 0 was approved by the human on 2026-08-10 and the approved plan is
     correlation id, relay publish and mark, consumer idempotency
     (processed then duplicate), and a poison message landing on the DLQ.
 
+- 2026-08-10, S4 AI Gateway, validated by `./scripts/verify.sh` (47 backend
+  tests green):
+  - `AIGateway` in the application layer: resolves versioned prompts from
+    the registry (`dira_reply` v1, `risk_signal` v1), enforces a timeout,
+    validates structured outputs against a Pydantic schema with one bounded
+    retry then a typed `AIValidationError`, and logs **every** call
+    (success, validation failure, timeout, provider error) to the
+    `ai_requests` table (migration `20e15ec02c23`) with provider, model,
+    prompt version, tokens, cost, latency, correlation id, and the
+    simulated flag. The log writes in its own session so failures survive
+    the caller's rollback.
+  - `FakeLLMProvider` (`# SIMULATED`, ADR 0002): default via
+    `LLM_PROVIDER=fake`. Deterministic keyword scenarios (crisis, low mood,
+    exam stress, appointment, default), schema shaped risk JSON, zero cost,
+    always `simulated=True`. Failure injection markers
+    `[[fail:timeout]]`, `[[fail:malformed]]`, `[[fail:error]]`.
+  - Provider factory: `fake` works, test proves a stub swap by name, and
+    selecting anthropic/openai/gemini fails loudly with a clear message
+    that real adapters arrive only when paid usage is switched on.
+  - Tests: fake provider determinism and scenarios (unit), gateway logging
+    of ok / validation_failed / timeout, structured output roundtrip,
+    unknown prompt rejection (integration).
+
 ## In flight
 
-- Nothing. S3 closed cleanly, working tree committed.
+- Nothing. S4 closed cleanly, working tree committed.
 
 ## Known limitations (intentional, coming in later phases)
 
@@ -98,19 +121,21 @@ Phase 0 was approved by the human on 2026-08-10 and the approved plan is
 - Chat refreshes messages on send only; live updates (polling or SSE) come
   with Dira in S5.
 
-## Next steps (S4, AI Gateway)
+## Next steps (S5, Dira minimal)
 
-1. `LLMProvider` protocol in the application layer; `FakeLLMProvider`
-   (deterministic, scenario driven, `# SIMULATED`, injectable failures) as
-   the default via `LLM_PROVIDER=fake` (ADR 0002).
-2. Prompt registry with versioned prompts; structured output validation with
-   bounded retry then typed error.
-3. `AIRequest` / `AIResponse` tables and full request logging: model,
-   provider, prompt version, tokens, cost, latency, validation result,
-   simulated flag, correlation id.
-4. A stub adapter test proving the env var provider swap (no real API calls,
-   no keys, still zero cost).
-5. Gate: gateway calls logged, validated, and labeled simulated end to end.
+1. When a patient posts a message, generate Dira's reply through the
+   gateway (`dira_reply` v1, fake provider) and persist it as a `dira`
+   sender message; emit `AIResponseGenerated` to the outbox.
+2. Decide sync vs async reply generation (probably in the API request for
+   S5 simplicity, moving to the consumer when risk analysis lands in S6)
+   and record the choice here or as an ADR.
+3. Student app: render Dira bubbles (already styled) with the SIMULATED
+   chip driven by the API's simulated flag; persistent Dira disclosure in
+   the chat header per DESIGN.md section 3.
+4. API: message response includes sender and simulated provenance; refresh
+   messages after send already picks the reply up.
+5. Gate: chat works end to end with visibly labeled simulated Dira replies
+   at zero cost; AI requests visible in ai_requests.
 
 ## Notes for the next session
 

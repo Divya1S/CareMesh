@@ -132,6 +132,32 @@ class ProcessedEventRow(Base):
     processed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
+class AIRequestRow(Base):
+    """Every AI Gateway call, success or failure. Append only."""
+
+    __tablename__ = "ai_requests"
+    __table_args__ = (Index("ix_ai_requests_org_id", "organization_id", "id"),)
+
+    id: Mapped[UUID] = _uuid_pk()
+    organization_id: Mapped[UUID] = mapped_column(ForeignKey("organizations.id"), nullable=False)
+    provider: Mapped[str] = mapped_column(String(50), nullable=False)
+    model: Mapped[str] = mapped_column(String(100), nullable=False)
+    prompt_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    prompt_version: Mapped[int] = mapped_column(nullable=False)
+    status: Mapped[str] = mapped_column(String(30), nullable=False)
+    simulated: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    validation_ok: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    latency_ms: Mapped[float] = mapped_column(nullable=False)
+    input_tokens: Mapped[int] = mapped_column(nullable=False)
+    output_tokens: Mapped[int] = mapped_column(nullable=False)
+    cost_usd: Mapped[float] = mapped_column(nullable=False)
+    correlation_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    error_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    request_messages: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    response_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = _created_at()
+
+
 class CareAssignmentRow(Base):
     __tablename__ = "care_assignments"
     __table_args__ = (

@@ -1,11 +1,12 @@
 """Repository implementations over SQLAlchemy, mapping rows to domain entities."""
 
-from datetime import datetime
+from datetime import UTC, datetime
 from uuid import UUID
 
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.application.ai.types import AIRequestLogEntry
 from app.domain.entities import (
     AuthSession,
     CareAssignment,
@@ -16,6 +17,7 @@ from app.domain.entities import (
 )
 from app.domain.events import DomainEvent
 from app.infrastructure.models import (
+    AIRequestRow,
     AuthSessionRow,
     CareAssignmentRow,
     ConversationRow,
@@ -241,6 +243,39 @@ class SqlEventOutbox:
                 published_at=None,
             )
         )
+
+
+class SqlAIRequestLog:
+    def __init__(self, session_factory) -> None:
+        # Own session per write: the log entry must survive even when the
+        # calling transaction rolls back (failures are exactly what we audit).
+        self._session_factory = session_factory
+
+    async def add(self, entry: AIRequestLogEntry) -> None:
+        async with self._session_factory() as session:
+            session.add(
+                AIRequestRow(
+                    id=UUID(entry.id),
+                    organization_id=UUID(entry.organization_id),
+                    provider=entry.provider,
+                    model=entry.model,
+                    prompt_name=entry.prompt_name,
+                    prompt_version=entry.prompt_version,
+                    status=entry.status,
+                    simulated=entry.simulated,
+                    validation_ok=entry.validation_ok,
+                    latency_ms=entry.latency_ms,
+                    input_tokens=entry.input_tokens,
+                    output_tokens=entry.output_tokens,
+                    cost_usd=entry.cost_usd,
+                    correlation_id=entry.correlation_id,
+                    error_type=entry.error_type,
+                    request_messages=entry.request_messages,
+                    response_text=entry.response_text,
+                    created_at=datetime.now(UTC),
+                )
+            )
+            await session.commit()
 
 
 class SqlCareAssignmentRepository:
