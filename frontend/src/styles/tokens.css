@@ -1,0 +1,56 @@
+/* CareMesh design tokens. Source of truth: docs/DESIGN.md section 2.
+   No hardcoded hex values in components; extend here instead. */
+
+:root {
+  --ink: #332327;
+  --ink-soft: #6e585e;
+  --surface: #fbf7f7;
+  --card: #ffffff;
+  --line: #f0e3e5;
+
+  --primary: #a63e56;
+  --primary-strong: #872f45;
+  --primary-soft: #f7e6ea;
+
+  /* Reserved for AI provenance only. Nothing else may use this hue. */
+  --ai: #9c6b1e;
+  --ai-soft: #f6edda;
+
+  --warn: #be5b2a;
+  --risk: #8f2d24;
+  --ok: #3e7c4f;
+
+  --r-card: 16px;
+  --r-control: 10px;
+  --r-pill: 999px;
+
+  --shadow-soft:
+    0 1px 2px rgb(23 48 43 / 0.05),
+    0 8px 24px rgb(23 48 43 / 0.06);
+}
+
+@theme inline {
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-surface: var(--surface);
+  --color-card: var(--card);
+  --color-line: var(--line);
+  --color-primary: var(--primary);
+  --color-primary-strong: var(--primary-strong);
+  --color-primary-soft: var(--primary-soft);
+  --color-ai: var(--ai);
+  --color-ai-soft: var(--ai-soft);
+  --color-warn: var(--warn);
+  --color-risk: var(--risk);
+  --color-ok: var(--ok);
+
+  --radius-card: var(--r-card);
+  --radius-control: var(--r-control);
+  --radius-pill: var(--r-pill);
+
+  --shadow-soft: var(--shadow-soft);
+
+  --font-display: var(--font-sora), ui-sans-serif, sans-serif;
+  --font-body: var(--font-jakarta), ui-sans-serif, sans-serif;
+  --font-mono: var(--font-jetbrains), ui-monospace, monospace;
+}

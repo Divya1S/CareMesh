@@ -19,6 +19,8 @@ class Settings(BaseSettings):
         "postgresql+asyncpg://caremesh:caremesh_dev_password@localhost:5433/caremesh"
     )
 
+    cors_origins: list[str] = ["http://localhost:3000"]
+
     # The dev default is intentionally not a secret. Anything but dev fails
     # closed at startup if this value is still in place.
     jwt_secret: str = "dev-only-not-a-secret"

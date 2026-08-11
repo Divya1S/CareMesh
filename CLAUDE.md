@@ -14,9 +14,10 @@ Honesty rules that must never be broken (repeated here because they carry weight
 
 ## Current state
 
-- **Phase:** S1, Foundation, complete (gate passed 2026-08-10). Next: S2, conversation API polish plus the student UI
+- **Phase:** S2, student app, complete (gate passed 2026-08-10). Next: S3, events online (outbox, relay, Redpanda consumers, DLQ)
 - **Approved through:** Phase 0 was explicitly approved by the human on 2026-08-10 ("start")
-- **Working end to end:** compose stack (Postgres 5433, Redis, Redpanda), auth with JWT and rotating refresh tokens, RBAC plus resource level authorization, conversation and message CRUD, 32 tests green through `./scripts/verify.sh`
+- **Working end to end:** compose stack (Postgres 5433, Redis, Redpanda), auth with JWT and rotating refresh tokens, RBAC plus resource level authorization, conversation and message CRUD, and the Next.js student app (welcome, login, chat) styled per `docs/DESIGN.md` with OpenAPI generated types. Backend 32 tests plus frontend 9 tests green through `./scripts/verify.sh`; browser flow smoke tested with Playwright
+- **Design:** `docs/DESIGN.md` is the authoritative design reference for all frontend work. Tokens live in `frontend/src/styles/tokens.css`. Gold is reserved for AI provenance; no blue anywhere
 - **Priority path:** vertical slice first (Student, Dira, risk signal, clinician workspace, ops console) before broadening to the school, guardian, and payer surfaces. See roadmap S1 to S7 in the proposal, section 11
 - **Key decisions, approved with Phase 0 and recorded as ADRs 0001 to 0004:** Redpanda as the broker speaking the Kafka API, the fake LLM provider as the dev default with real providers switched on only by the `LLM_PROVIDER` env var, the outbox pattern for events, and a small workflow engine inside the repo
 - **Budget constraint, standing:** everything free and local. Real LLM API usage is the only permitted future cost and must be flagged to the human before use

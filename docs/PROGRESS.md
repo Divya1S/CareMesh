@@ -5,10 +5,11 @@
 
 ## Current phase
 
-**S1, Foundation: COMPLETE. Gate passed on 2026-08-10.** Next phase is
-**S2: conversation API polish plus the minimal Next.js student app.**
+**S2, student app: COMPLETE. Gate passed on 2026-08-10.** Next phase is
+**S3: events online (outbox table, relay, Redpanda consumer worker, DLQ).**
 Phase 0 was approved by the human on 2026-08-10 and the approved plan is
-`docs/PHASE_0_PROPOSAL.md` (roadmap in section 11).
+`docs/PHASE_0_PROPOSAL.md` (roadmap in section 11). All frontend work follows
+`docs/DESIGN.md` (added by the human; authoritative).
 
 ## Done
 
@@ -41,9 +42,30 @@ Phase 0 was approved by the human on 2026-08-10 and the approved plan is
   - Live smoke test performed: uvicorn on 8000, login, create conversation,
     post message, 401 without token.
 
+- 2026-08-10, S2 student app, all validated by `./scripts/verify.sh` (green)
+  and a Playwright browser smoke test (welcome, login, create conversation,
+  send message, reload persists, crisis panel, zero console errors):
+  - Next.js 16 app under `frontend/` with the DESIGN.md token system
+    (`src/styles/tokens.css`, rose/gold palette, no blue, gold reserved for
+    AI), fonts Sora / Plus Jakarta Sans / JetBrains Mono via next/font.
+  - Core components on tokens: Button, Card, Chip, AIFrame (AI provenance
+    wrapper with SIMULATED chip, built early per design), ChatBubble
+    (patient/dira/clinician variants), EmptyState, Field.
+  - Pages: lite welcome page (thread illustration, honesty banner), login,
+    chat (left rail with disabled "soon" surfaces, conversation list, new
+    conversation, composer, crisis resources panel always in the header).
+  - API client with problem details parsing and automatic refresh token
+    rotation retry; TypeScript API types generated from the backend OpenAPI
+    schema (`scripts/gen-api-types.sh`, regenerate after API changes).
+  - Backend: CORS for http://localhost:3000 via settings.
+  - Frontend tests: vitest + testing library (9 tests: AIFrame provenance,
+    ChatBubble labeling, token storage). verify.sh now runs frontend lint,
+    typecheck, and tests. Playwright installed (dev dep) for smoke and later
+    real E2E.
+
 ## In flight
 
-- Nothing. S1 closed cleanly, working tree committed.
+- Nothing. S2 closed cleanly, working tree committed.
 
 ## Known limitations (intentional, coming in later phases)
 
@@ -52,15 +74,24 @@ Phase 0 was approved by the human on 2026-08-10 and the approved plan is
 - No audit log table yet; no domain events published yet (S3 brings the
   outbox and Redpanda flow).
 - Ops admin role exists but has no surface until the ops console phase.
-- No frontend yet (S2).
+- Frontend stores tokens in localStorage for now; the security hardening
+  phase moves them to httpOnly cookies behind a route handler.
+- Chat refreshes messages on send only; live updates (polling or SSE) come
+  with Dira in S5.
 
-## Next steps (S2)
+## Next steps (S3, events online)
 
-1. Minimal Next.js student app under `frontend/`: login, conversation list,
-   chat view, design system foundations, AI labeling components ready for S5.
-2. OpenAPI generated TypeScript types (no hand duplicated API types).
-3. Frontend lint, typecheck, and tests wired into `scripts/verify.sh`.
-4. S2 gate: a student logs in, sends a message, sees it persisted.
+1. `DomainEventLog` outbox table plus migration (envelope: event id, type,
+   schema version, occurred at, correlation and causation ids, tenant id,
+   payload, published at).
+2. Emit `PatientMessageCreated` in the same transaction as message writes.
+3. Relay process publishing outbox rows to Redpanda
+   (`caremesh.conversation.patient_message_created`), aiokafka producer.
+4. Worker consumer with idempotency (processed events table), bounded
+   retries, and a dead letter topic; runs as a separate compose process.
+5. Tests: outbox write is transactional, relay publishes, consumer is
+   idempotent, poison messages land in the DLQ. Gate: event flow
+   demonstrable end to end, failure and replay paths tested.
 
 ## Standing constraints from the human (2026-08-10)
 
