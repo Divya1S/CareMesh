@@ -182,8 +182,8 @@ export default function ChatPage() {
               Chat
             </h1>
             <p className="text-[0.8125rem] text-ink-soft">
-              Dira, the AI companion, joins in a later phase. Right now this
-              space is shared with your care team.
+              Dira is an AI companion, not a therapist. Your care team can see
+              this space.
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -224,6 +224,7 @@ export default function ChatPage() {
                 sender={m.sender_type as BubbleSender}
                 senderName={m.sender_type === "clinician" ? "Your therapist" : undefined}
                 time={timeOf(m.created_at)}
+                simulated={m.simulated}
               >
                 {m.content}
               </ChatBubble>

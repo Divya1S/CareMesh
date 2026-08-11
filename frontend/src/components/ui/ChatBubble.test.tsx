@@ -8,6 +8,20 @@ describe("ChatBubble", () => {
     expect(screen.getByText(/Dira · AI companion/)).toBeInTheDocument();
   });
 
+  it("shows the SIMULATED chip on simulated Dira replies", () => {
+    render(
+      <ChatBubble sender="dira" simulated>
+        hello
+      </ChatBubble>,
+    );
+    expect(screen.getByText("SIMULATED")).toBeInTheDocument();
+  });
+
+  it("shows no SIMULATED chip when the flag is absent", () => {
+    render(<ChatBubble sender="dira">hello</ChatBubble>);
+    expect(screen.queryByText("SIMULATED")).not.toBeInTheDocument();
+  });
+
   it("shows the clinician name", () => {
     render(
       <ChatBubble sender="clinician" senderName="Your therapist">

@@ -59,6 +59,8 @@ def _message(row: MessageRow) -> Message:
         sender_id=row.sender_id,
         content=row.content,
         created_at=row.created_at,
+        ai_request_id=row.ai_request_id,
+        simulated=row.simulated,
     )
 
 
@@ -209,6 +211,8 @@ class SqlMessageRepository:
                 sender_id=message.sender_id,
                 content=message.content,
                 created_at=message.created_at,
+                ai_request_id=message.ai_request_id,
+                simulated=message.simulated,
             )
         )
 

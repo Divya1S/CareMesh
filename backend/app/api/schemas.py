@@ -54,3 +54,6 @@ class MessageResponse(BaseModel):
     sender_id: UUID | None
     content: str
     created_at: datetime
+    # AI provenance: null for human senders. True means the reply came from
+    # the fake provider and the UI must show the SIMULATED label.
+    simulated: bool | None = None

@@ -28,6 +28,34 @@ class DomainEvent:
 
 
 PATIENT_MESSAGE_CREATED = "PatientMessageCreated"
+AI_RESPONSE_GENERATED = "AIResponseGenerated"
+
+
+def ai_response_generated(
+    *,
+    message_id: UUID,
+    conversation_id: UUID,
+    ai_request_id: UUID,
+    simulated: bool,
+    organization_id: UUID,
+    occurred_at: datetime,
+    correlation_id: str | None,
+    causation_id: str | None = None,
+) -> DomainEvent:
+    return DomainEvent(
+        event_type=AI_RESPONSE_GENERATED,
+        schema_version=1,
+        occurred_at=occurred_at,
+        organization_id=organization_id,
+        correlation_id=correlation_id,
+        causation_id=causation_id,
+        payload={
+            "message_id": str(message_id),
+            "conversation_id": str(conversation_id),
+            "ai_request_id": str(ai_request_id),
+            "simulated": simulated,
+        },
+    )
 
 
 def patient_message_created(

@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { Chip } from "./Chip";
 
 export type BubbleSender = "patient" | "dira" | "clinician" | "system";
 
@@ -10,11 +11,13 @@ export function ChatBubble({
   sender,
   senderName,
   time,
+  simulated,
   children,
 }: {
   sender: BubbleSender;
   senderName?: string;
   time?: string;
+  simulated?: boolean | null;
   children: ReactNode;
 }) {
   const mine = sender === "patient";
@@ -29,11 +32,18 @@ export function ChatBubble({
     <div className={`flex ${mine ? "justify-end" : "justify-start"}`}>
       <div className={`${base} ${look}`}>
         {sender !== "patient" && (
-          <p className="mb-1 text-[0.75rem] font-medium text-ink-soft">
+          <p className="mb-1 flex items-center gap-2 text-[0.75rem] font-medium text-ink-soft">
             {sender === "dira" ? (
-              <span className="text-ai">
-                <span aria-hidden>✦</span> Dira · AI companion
-              </span>
+              <>
+                <span className="text-ai">
+                  <span aria-hidden>✦</span> Dira · AI companion
+                </span>
+                {simulated ? (
+                  <Chip tone="ai" title="Produced by the fake provider, not a real model">
+                    SIMULATED
+                  </Chip>
+                ) : null}
+              </>
             ) : (
               (senderName ?? sender)
             )}

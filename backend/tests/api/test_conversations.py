@@ -32,7 +32,8 @@ async def test_patient_posts_and_reads_messages(client, seeded, auth_header):
         f"/api/v1/conversations/{conversation['id']}/messages", headers=headers
     )
     assert messages.status_code == 200
-    assert len(messages.json()) == 1
+    # The patient's message plus Dira's simulated reply (S5).
+    assert [m["sender_type"] for m in messages.json()] == ["patient", "dira"]
 
 
 async def test_therapist_cannot_create_conversation(client, seeded, auth_header):

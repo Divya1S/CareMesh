@@ -5,8 +5,9 @@
 
 ## Current phase
 
-**S4, AI Gateway: COMPLETE. Gate passed on 2026-08-10.** Next phase is
-**S5: Dira minimal, replying in the student app on the fake provider.**
+**S5, Dira minimal: COMPLETE. Gate passed on 2026-08-10.** Next phase is
+**S6: the Risk Signal agent, deterministic thresholds, the Risk Escalation
+workflow, and a minimal clinician review queue.**
 Phase 0 was approved by the human on 2026-08-10 and the approved plan is
 `docs/PHASE_0_PROPOSAL.md` (roadmap in section 11). All frontend work follows
 `docs/DESIGN.md` (added by the human; authoritative).
@@ -105,9 +106,26 @@ Phase 0 was approved by the human on 2026-08-10 and the approved plan is
     of ok / validation_failed / timeout, structured output roundtrip,
     unknown prompt rejection (integration).
 
+- 2026-08-10, S5 Dira minimal, validated by `./scripts/verify.sh` (52 backend
+  and 11 frontend tests green) and a browser smoke test with a reviewed
+  screenshot (gold Dira bubble, ✦ label, SIMULATED chip, zero console errors):
+  - Patient messages get a Dira reply through the gateway (`dira_reply` v1,
+    fake provider), generated synchronously in the request (ADR 0005) with
+    the last 12 messages as conversation memory. Clinician messages get no
+    reply. Gateway failures are swallowed after being audited in
+    `ai_requests`, so Dira being down never blocks the patient's message
+    (tested with the `[[fail:error]]` marker).
+  - Messages carry AI provenance (`ai_request_id`, `simulated`, migration
+    `7af8902c8905`) and the API exposes the simulated flag.
+    `AIResponseGenerated` v1 goes to the outbox in the same transaction and
+    is documented in `docs/EVENTS.md`.
+  - Chat UI: Dira bubbles show the SIMULATED chip from the API flag, and the
+    header carries the persistent disclosure that Dira is an AI companion,
+    not a therapist.
+
 ## In flight
 
-- Nothing. S4 closed cleanly, working tree committed.
+- Nothing. S5 closed cleanly, working tree committed.
 
 ## Known limitations (intentional, coming in later phases)
 
@@ -121,21 +139,25 @@ Phase 0 was approved by the human on 2026-08-10 and the approved plan is
 - Chat refreshes messages on send only; live updates (polling or SSE) come
   with Dira in S5.
 
-## Next steps (S5, Dira minimal)
+## Next steps (S6, risk signal and escalation)
 
-1. When a patient posts a message, generate Dira's reply through the
-   gateway (`dira_reply` v1, fake provider) and persist it as a `dira`
-   sender message; emit `AIResponseGenerated` to the outbox.
-2. Decide sync vs async reply generation (probably in the API request for
-   S5 simplicity, moving to the consumer when risk analysis lands in S6)
-   and record the choice here or as an ADR.
-3. Student app: render Dira bubbles (already styled) with the SIMULATED
-   chip driven by the API's simulated flag; persistent Dira disclosure in
-   the chat header per DESIGN.md section 3.
-4. API: message response includes sender and simulated provenance; refresh
-   messages after send already picks the reply up.
-5. Gate: chat works end to end with visibly labeled simulated Dira replies
-   at zero cost; AI requests visible in ai_requests.
+1. Risk analysis in the conversation consumer: on `PatientMessageCreated`
+   with sender patient, fetch the message content from Postgres, call the
+   gateway with `risk_signal` v1 and a Pydantic schema, and store a
+   `RiskSignal` row (category, severity, confidence, evidence, model and
+   prompt version, ai_request_id).
+2. Deterministic thresholds in domain code decide the outcome: below
+   threshold log only; at or above threshold create a Risk Escalation
+   `WorkflowInstance` (states per ADR 0004) and emit `RiskSignalDetected`
+   and `RiskReviewRequired`.
+3. Minimal clinician workspace: review queue for assigned patients
+   (severity icon plus label, never color alone), conversation view, and
+   accept / edit / reject on the AI signal inside the AIFrame per
+   DESIGN.md section 3, all audited and evented (`HumanReviewCompleted`).
+4. Failure paths tested: AI timeout, malformed output to DLQ, and the
+   fixture driven crisis scenario end to end.
+5. Gate: a crisis scenario message drives signal, workflow, and human
+   review end to end on the fake provider.
 
 ## Notes for the next session
 

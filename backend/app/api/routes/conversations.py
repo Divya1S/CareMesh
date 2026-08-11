@@ -28,6 +28,7 @@ def _message(m: Message) -> MessageResponse:
         sender_id=m.sender_id,
         content=m.content,
         created_at=m.created_at,
+        simulated=m.simulated,
     )
 
 

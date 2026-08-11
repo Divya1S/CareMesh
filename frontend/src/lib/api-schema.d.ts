@@ -214,6 +214,8 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /** Simulated */
+            simulated?: boolean | null;
         };
         /** RefreshRequest */
         RefreshRequest: {

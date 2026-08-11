@@ -68,9 +68,10 @@ async def test_post_message_writes_outbox_in_same_transaction(client, app, seede
 
     async with app.state.session_factory() as session:
         rows = (await session.scalars(select(DomainEventLogRow))).all()
-    assert len(rows) == 1
-    row = rows[0]
-    assert row.event_type == "PatientMessageCreated"
+    by_type = {r.event_type: r for r in rows}
+    # The patient message event plus Dira's AIResponseGenerated (S5).
+    assert sorted(by_type) == ["AIResponseGenerated", "PatientMessageCreated"]
+    row = by_type["PatientMessageCreated"]
     assert row.payload["message_id"] == message["id"]
     assert "content" not in row.payload, "clinical text must not enter events"
     assert row.correlation_id == response.headers["x-request-id"]

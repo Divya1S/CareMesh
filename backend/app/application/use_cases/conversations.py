@@ -4,7 +4,9 @@ from datetime import UTC, datetime
 from uuid import UUID
 
 from app.application import authorization as authz
-from app.application.errors import NotFoundError
+from app.application.ai.gateway import AIGateway
+from app.application.ai.types import LLMMessage
+from app.application.errors import AppError, NotFoundError
 from app.application.ports import (
     CareAssignmentRepository,
     ConversationRepository,
@@ -12,8 +14,12 @@ from app.application.ports import (
     MessageRepository,
 )
 from app.domain.entities import Conversation, Message, Role, SenderType, User
-from app.domain.events import patient_message_created
+from app.domain.events import ai_response_generated, patient_message_created
 from app.domain.ids import uuid7
+
+# How much conversation history Dira sees. Enough for continuity in S5;
+# revisited when conversations grow long.
+DIRA_MEMORY_MESSAGES = 12
 
 MAX_PAGE_SIZE = 100
 
@@ -29,11 +35,13 @@ class ConversationService:
         messages: MessageRepository,
         assignments: CareAssignmentRepository,
         outbox: EventOutbox,
+        gateway: AIGateway,
     ) -> None:
         self._conversations = conversations
         self._messages = messages
         self._assignments = assignments
         self._outbox = outbox
+        self._gateway = gateway
 
     async def create_conversation(self, actor: User, title: str) -> Conversation:
         authz.ensure_can_create_conversation(actor)
@@ -114,7 +122,59 @@ class ConversationService:
                 correlation_id=correlation_id,
             )
         )
+        if actor.role is Role.PATIENT:
+            await self._generate_dira_reply(conversation, correlation_id)
         return message
+
+    async def _generate_dira_reply(
+        self, conversation: Conversation, correlation_id: str | None
+    ) -> Message | None:
+        """Dira answers patient messages through the AI Gateway (ADR 0005:
+        synchronous in the request while the provider is the instant fake).
+        Dira being unavailable must never block the patient's message, so
+        gateway failures are swallowed here; the gateway has already audited
+        them in ai_requests."""
+        history = await self._messages.list_for_conversation(conversation.id, 100, 0)
+        llm_messages: list[LLMMessage] = []
+        for m in history[-DIRA_MEMORY_MESSAGES:]:
+            if m.sender_type is SenderType.DIRA:
+                llm_messages.append(LLMMessage("assistant", m.content))
+            elif m.sender_type is SenderType.CLINICIAN:
+                llm_messages.append(LLMMessage("user", f"(from the care team) {m.content}"))
+            else:
+                llm_messages.append(LLMMessage("user", m.content))
+        try:
+            result = await self._gateway.complete(
+                prompt_name="dira_reply",
+                user_messages=llm_messages,
+                organization_id=conversation.organization_id,
+                correlation_id=correlation_id,
+            )
+        except AppError:
+            return None
+        reply = Message(
+            id=uuid7(),
+            conversation_id=conversation.id,
+            sender_type=SenderType.DIRA,
+            sender_id=None,
+            content=result.text,
+            created_at=datetime.now(UTC),
+            ai_request_id=UUID(result.ai_request_id),
+            simulated=result.simulated,
+        )
+        await self._messages.add(reply)
+        await self._outbox.add(
+            ai_response_generated(
+                message_id=reply.id,
+                conversation_id=conversation.id,
+                ai_request_id=reply.ai_request_id,
+                simulated=result.simulated,
+                organization_id=conversation.organization_id,
+                occurred_at=reply.created_at,
+                correlation_id=correlation_id,
+            )
+        )
+        return reply
 
     async def _therapist_assigned(self, actor: User, conversation: Conversation) -> bool:
         if actor.role is not Role.THERAPIST:

@@ -97,6 +97,8 @@ class MessageRow(Base):
     sender_id: Mapped[UUID | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     content: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = _created_at()
+    ai_request_id: Mapped[UUID | None] = mapped_column(ForeignKey("ai_requests.id"), nullable=True)
+    simulated: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
 
 
 class DomainEventLogRow(Base):

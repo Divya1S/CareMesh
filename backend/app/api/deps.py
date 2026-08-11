@@ -7,11 +7,14 @@ from uuid import UUID
 from fastapi import Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.application.ai.gateway import AIGateway
 from app.application.errors import UnauthorizedError
 from app.application.use_cases.auth import AuthService
 from app.application.use_cases.conversations import ConversationService
 from app.domain.entities import User
+from app.infrastructure.ai.factory import create_provider
 from app.infrastructure.repositories import (
+    SqlAIRequestLog,
     SqlAuthSessionRepository,
     SqlCareAssignmentRepository,
     SqlConversationRepository,
@@ -63,12 +66,24 @@ def get_auth_service(
     )
 
 
-def get_conversation_service(session: SessionDep) -> ConversationService:
+def get_ai_gateway(request: Request, settings: SettingsDep) -> AIGateway:
+    return AIGateway(
+        create_provider(settings.llm_provider),
+        SqlAIRequestLog(request.app.state.session_factory),
+        timeout_seconds=settings.ai_timeout_seconds,
+    )
+
+
+AIGatewayDep = Annotated[AIGateway, Depends(get_ai_gateway)]
+
+
+def get_conversation_service(session: SessionDep, gateway: AIGatewayDep) -> ConversationService:
     return ConversationService(
         conversations=SqlConversationRepository(session),
         messages=SqlMessageRepository(session),
         assignments=SqlCareAssignmentRepository(session),
         outbox=SqlEventOutbox(session),
+        gateway=gateway,
     )
 
 

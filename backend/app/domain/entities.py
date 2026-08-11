@@ -69,6 +69,10 @@ class Message:
     sender_id: UUID | None
     content: str
     created_at: datetime
+    # AI provenance: set only on dira messages. The simulated flag must
+    # survive to the UI; it is never dropped.
+    ai_request_id: UUID | None = None
+    simulated: bool | None = None
 
 
 @dataclass(frozen=True, slots=True)

@@ -46,3 +46,17 @@ This file documents reality only; events land here when they ship.
   errors, then the raw record goes to
   `caremesh.conversation.patient_message_created.dlq`. Malformed records go
   to the DLQ immediately.
+
+### AIResponseGenerated, v1
+
+- **Purpose:** Dira produced a reply in a conversation. Feeds the AI
+  observability and evaluation surfaces in later phases.
+- **Producer:** `ConversationService._generate_dira_reply` (outbox, same
+  transaction as the reply message; ADR 0005).
+- **Topic:** `caremesh.ai.ai_response_generated`
+- **Consumers:** none yet; the ops console and evaluation phases subscribe
+  later.
+- **Payload:** `message_id`, `conversation_id`, `ai_request_id`,
+  `simulated`. No content.
+- **Failure behavior:** standard outbox delivery; no consumer side effects
+  yet.

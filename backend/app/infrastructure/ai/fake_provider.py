@@ -28,7 +28,7 @@ class FakeProviderError(RuntimeError):
 
 _SCENARIOS: list[tuple[tuple[str, ...], str]] = [
     (
-        ("kill myself", "suicide", "end it", "hurt myself", "self harm"),
+        ("kill myself", "suicide", "end it", "hurt myself", "hurting myself", "self harm"),
         "I'm really glad you told me, and I want you to know this matters. "
         "I'm an AI companion and not able to keep you safe on my own, so "
         "please use the crisis resources at the top of this page right now, "
