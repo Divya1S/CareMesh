@@ -5,48 +5,62 @@
 
 ## Current phase
 
-**Phase 0, the repository audit and architecture proposal, is COMPLETE and AWAITING HUMAN APPROVAL.**
-Phase 1 (roadmap phase **S1, Foundation**) must not start until the human
-explicitly approves `docs/PHASE_0_PROPOSAL.md`.
+**S1, Foundation: COMPLETE. Gate passed on 2026-08-10.** Next phase is
+**S2: conversation API polish plus the minimal Next.js student app.**
+Phase 0 was approved by the human on 2026-08-10 and the approved plan is
+`docs/PHASE_0_PROPOSAL.md` (roadmap in section 11).
 
 ## Done
 
-- 2026-08-10: `git init` on branch `main`, remote `origin` set to
-  https://github.com/Divya1S/CareMesh.git, baseline `.gitignore` added.
-- 2026-08-10: Build spec moved from `caremesh-build-spec.md` to `docs/BUILD_SPEC.md`.
-- 2026-08-10: Repository audit performed. The repo was empty except `CLAUDE.md`
-  and the spec. This was verified, not assumed.
-- 2026-08-10: `docs/PHASE_0_PROPOSAL.md` written with all 12 sections, including:
-  - Broker decision: **Redpanda**, compatible with the Kafka API and light on
-    the laptop, with a comparison table and rationale (proposal section 5).
-  - AI Gateway with the **fake provider as the dev default**
-    (`LLM_PROVIDER=fake`), real providers switched on by env var only. This is
-    the one place the project could ever cost money (proposal section 6).
-  - **Vertical slice roadmap S1 to S7** (proposal section 11): student, Dira,
-    risk signal, clinician workspace, and ops console working end to end before
-    the school, guardian, and payer surfaces.
-- 2026-08-10: The human recreated the GitHub repo. History was rebuilt and
-  pushed fresh to match the writing rules below.
+- 2026-08-10, Phase 0: audit, proposal (all 12 sections), approval. ADRs 0001
+  to 0004 recorded (Redpanda broker, fake LLM provider default, outbox
+  pattern, workflow engine in the repo).
+- 2026-08-10, S1 Foundation, all validated by `./scripts/verify.sh` (green):
+  - `docker-compose.yml`: Postgres 16 (host port 5433, see gotchas in
+    CLAUDE.md), Redis 7, Redpanda v24.2 in dev mode, all with healthchecks.
+    A test database `caremesh_test` is created by an init script.
+  - Backend in clean layers under `backend/app/`: `domain/` (entities, UUIDv7
+    generator, zero framework imports), `application/` (ports, authorization
+    policies, auth and conversation use cases), `infrastructure/` (SQLAlchemy
+    models and repositories, Argon2 hashing, JWT service, structlog setup,
+    settings), `api/` (thin routes, problem details errors, correlation ID
+    middleware).
+  - Alembic migration `e95545ccf66a`: organizations, users, auth_sessions,
+    conversations, messages, care_assignments, with intentional indexes.
+  - Auth: login, single use rotating refresh tokens backed by an
+    auth_sessions table, `/api/v1/auth/me`. RBAC roles plus resource level
+    policies: patients see only their own conversations, therapists only
+    assigned patients, cross tenant access reads as 404, other roles denied.
+  - API: `/api/v1/conversations` CRUD plus messages, paginated, all behind
+    bearer auth. `/healthz` checks the database.
+  - Tests: 32 passing (unit: ids, authorization policies, security; API
+    integration against dockerized Postgres through the real migrations).
+  - `backend/scripts/seed.py` (idempotent demo data,
+    student@demo.caremesh.org / therapist / ops, password caremesh-demo),
+    `backend/.env.example`, `scripts/verify.sh`.
+  - Live smoke test performed: uvicorn on 8000, login, create conversation,
+    post message, 401 without token.
 
 ## In flight
 
-- Nothing. Stopped at the Phase 0 gate by design.
+- Nothing. S1 closed cleanly, working tree committed.
 
-## Known issues
+## Known limitations (intentional, coming in later phases)
 
-- None. No code exists yet. The repo is docs only and not broken.
+- No rate limiting yet (Redis is running but unused; first use will be
+  documented per the conventions).
+- No audit log table yet; no domain events published yet (S3 brings the
+  outbox and Redpanda flow).
+- Ops admin role exists but has no surface until the ops console phase.
+- No frontend yet (S2).
 
-## Next steps, blocked on approval
+## Next steps (S2)
 
-1. The human reviews `docs/PHASE_0_PROPOSAL.md` and approves it or requests changes.
-2. On approval: record the approval in `CLAUDE.md` under Current state and
-   here, write ADRs 0001 to 0004 (Redpanda, fake provider default, outbox
-   pattern, workflow engine in the repo), then begin **S1, Foundation**: the
-   compose stack with Postgres, Redis, and Redpanda, the backend clean
-   architecture skeleton, Alembic migrations for identity, tenancy, and the
-   conversation core, auth plus RBAC, and `scripts/verify.sh`.
-3. S1 exit gate: `docker compose up -d` healthy, `./scripts/verify.sh` green,
-   and authorized CRUD demonstrable through the API.
+1. Minimal Next.js student app under `frontend/`: login, conversation list,
+   chat view, design system foundations, AI labeling components ready for S5.
+2. OpenAPI generated TypeScript types (no hand duplicated API types).
+3. Frontend lint, typecheck, and tests wired into `scripts/verify.sh`.
+4. S2 gate: a student logs in, sends a message, sees it persisted.
 
 ## Standing constraints from the human (2026-08-10)
 

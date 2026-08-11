@@ -14,11 +14,11 @@ Honesty rules that must never be broken (repeated here because they carry weight
 
 ## Current state
 
-- **Phase:** 0 complete. The proposal is at `docs/PHASE_0_PROPOSAL.md` and is **awaiting human approval**
-- **Approved through:** nothing yet. Phase 0 requires explicit human approval before Phase 1
-- **Working end to end:** nothing yet (the repo is docs only, and the audit confirmed no code exists)
+- **Phase:** S1, Foundation, complete (gate passed 2026-08-10). Next: S2, conversation API polish plus the student UI
+- **Approved through:** Phase 0 was explicitly approved by the human on 2026-08-10 ("start")
+- **Working end to end:** compose stack (Postgres 5433, Redis, Redpanda), auth with JWT and rotating refresh tokens, RBAC plus resource level authorization, conversation and message CRUD, 32 tests green through `./scripts/verify.sh`
 - **Priority path:** vertical slice first (Student, Dira, risk signal, clinician workspace, ops console) before broadening to the school, guardian, and payer surfaces. See roadmap S1 to S7 in the proposal, section 11
-- **Key Phase 0 decisions, pending approval:** Redpanda as the broker speaking the Kafka API (light on the laptop), the fake LLM provider as the dev default with real providers switched on only by the `LLM_PROVIDER` env var, the outbox pattern for events, and a small workflow engine inside the repo
+- **Key decisions, approved with Phase 0 and recorded as ADRs 0001 to 0004:** Redpanda as the broker speaking the Kafka API, the fake LLM provider as the dev default with real providers switched on only by the `LLM_PROVIDER` env var, the outbox pattern for events, and a small workflow engine inside the repo
 - **Budget constraint, standing:** everything free and local. Real LLM API usage is the only permitted future cost and must be flagged to the human before use
 
 ## Architecture summary
@@ -82,7 +82,10 @@ uv run python -m evals.run --dataset golden
 
 ## Gotchas
 
-- (none yet: add flaky tests, ordering constraints, docker quirks, provider rate limits, and similar as they surface)
+- A Homebrew postgresql@16 on this machine owns 127.0.0.1:5432, so the compose Postgres publishes on host port 5433. All connection strings use 5433.
+- pydantic EmailStr (email-validator) rejects reserved TLDs such as .test and .local. Demo and test accounts use @something.caremesh.org addresses.
+- The ORM models define no relationship() mappings, so SQLAlchemy does not order inserts across tables for foreign keys in one flush. When seeding related rows in one session, flush per dependency level (see tests/conftest.py).
+- The docker/postgres/init scripts (test database creation) only run on first container start. If the postgres volume predates a new init script, create the database manually or remove the volume.
 
 ## Session protocol
 
