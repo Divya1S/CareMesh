@@ -8,7 +8,7 @@ from fastapi import Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.application.ai.gateway import AIGateway
-from app.application.errors import UnauthorizedError
+from app.application.errors import RateLimitedError, UnauthorizedError
 from app.application.use_cases.auth import AuthService
 from app.application.use_cases.claims import ClaimsService
 from app.application.use_cases.conversations import ConversationService
@@ -21,9 +21,11 @@ from app.domain.entities import User
 from app.infrastructure.ai.embeddings import create_embedding_provider
 from app.infrastructure.ai.factory import create_provider
 from app.infrastructure.payer.fake_payer import FakePayerAdapter
+from app.infrastructure.rate_limit import RedisRateLimiter
 from app.infrastructure.repositories import (
     SqlAIRequestLog,
     SqlAIRequestQuery,
+    SqlAuditLog,
     SqlAuthSessionRepository,
     SqlCareAssignmentRepository,
     SqlChunkRepository,
@@ -71,14 +73,22 @@ def get_token_service(settings: SettingsDep) -> JwtTokenService:
 TokenServiceDep = Annotated[JwtTokenService, Depends(get_token_service)]
 
 
+def get_audit_log(request: Request) -> SqlAuditLog:
+    return SqlAuditLog(request.app.state.session_factory)
+
+
+AuditLogDep = Annotated[SqlAuditLog, Depends(get_audit_log)]
+
+
 def get_auth_service(
-    session: SessionDep, settings: SettingsDep, tokens: TokenServiceDep
+    session: SessionDep, settings: SettingsDep, tokens: TokenServiceDep, audit: AuditLogDep
 ) -> AuthService:
     return AuthService(
         users=SqlUserRepository(session),
         sessions=SqlAuthSessionRepository(session),
         hasher=Argon2PasswordHasher(),
         tokens=tokens,
+        audit=audit,
         access_ttl_seconds=settings.access_token_ttl_seconds,
         refresh_ttl_seconds=settings.refresh_token_ttl_seconds,
     )
@@ -112,7 +122,7 @@ def get_correlation_id(request: Request) -> str | None:
 CorrelationIdDep = Annotated[str | None, Depends(get_correlation_id)]
 
 
-def get_review_service(session: SessionDep) -> ReviewService:
+def get_review_service(session: SessionDep, audit: AuditLogDep) -> ReviewService:
     return ReviewService(
         workflows=SqlWorkflowRepository(session),
         risks=SqlRiskRepository(session),
@@ -120,17 +130,19 @@ def get_review_service(session: SessionDep) -> ReviewService:
         users=SqlUserRepository(session),
         messages=SqlMessageRepository(session),
         outbox=SqlEventOutbox(session),
+        audit=audit,
     )
 
 
 ReviewServiceDep = Annotated[ReviewService, Depends(get_review_service)]
 
 
-def get_ops_service(session: SessionDep) -> OpsService:
+def get_ops_service(session: SessionDep, audit: AuditLogDep) -> OpsService:
     return OpsService(
         workflows=SqlWorkflowRepository(session),
         ai_requests=SqlAIRequestQuery(session),
         events=SqlEventLogQuery(session),
+        audit=audit,
     )
 
 
@@ -178,13 +190,14 @@ def get_guardian_service(session: SessionDep) -> GuardianService:
 GuardianServiceDep = Annotated[GuardianService, Depends(get_guardian_service)]
 
 
-def get_claims_service(session: SessionDep) -> ClaimsService:
+def get_claims_service(session: SessionDep, audit: AuditLogDep) -> ClaimsService:
     return ClaimsService(
         claims=SqlClaimRepository(session),
         workflows=SqlWorkflowRepository(session),
         assignments=SqlCareAssignmentRepository(session),
         adapter=FakePayerAdapter(),
         outbox=SqlEventOutbox(session),
+        audit=audit,
     )
 
 
@@ -204,5 +217,29 @@ async def get_current_user(request: Request, session: SessionDep, tokens: TokenS
 
 
 CurrentUserDep = Annotated[User, Depends(get_current_user)]
+
+
+def get_rate_limiter(request: Request) -> RedisRateLimiter:
+    return RedisRateLimiter(request.app.state.redis)
+
+
+RateLimiterDep = Annotated[RedisRateLimiter, Depends(get_rate_limiter)]
+
+
+async def enforce_ai_rate_limit(
+    user: CurrentUserDep, limiter: RateLimiterDep, settings: SettingsDep
+) -> None:
+    """Cost control on endpoints that reach the AI Gateway, per user."""
+    decision = await limiter.allow(
+        f"ai:{user.id}", settings.ai_requests_per_minute, window_seconds=60
+    )
+    if not decision.allowed:
+        raise RateLimitedError(
+            "You are sending requests faster than the assistant can keep up. "
+            "Take a short breather and try again.",
+            retry_after_seconds=decision.retry_after_seconds,
+        )
+
+
 AuthServiceDep = Annotated[AuthService, Depends(get_auth_service)]
 ConversationServiceDep = Annotated[ConversationService, Depends(get_conversation_service)]

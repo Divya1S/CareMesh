@@ -1,13 +1,33 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 
-from app.api.deps import AuthServiceDep, CurrentUserDep
+from app.api.deps import AuthServiceDep, CurrentUserDep, RateLimiterDep, SettingsDep
 from app.api.schemas import LoginRequest, MeResponse, RefreshRequest, TokenPairResponse
+from app.application.errors import RateLimitedError
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 @router.post("/login", response_model=TokenPairResponse)
-async def login(body: LoginRequest, auth: AuthServiceDep) -> TokenPairResponse:
+async def login(
+    body: LoginRequest,
+    request: Request,
+    auth: AuthServiceDep,
+    limiter: RateLimiterDep,
+    settings: SettingsDep,
+) -> TokenPairResponse:
+    # Brute force protection, keyed by client address and target account so
+    # one noisy address cannot lock everyone out.
+    client = request.client.host if request.client else "unknown"
+    decision = await limiter.allow(
+        f"login:{client}:{body.email.lower()}",
+        settings.login_attempts_per_minute,
+        window_seconds=60,
+    )
+    if not decision.allowed:
+        raise RateLimitedError(
+            "Too many sign in attempts. Wait a minute and try again.",
+            retry_after_seconds=decision.retry_after_seconds,
+        )
     pair = await auth.login(body.email, body.password)
     return TokenPairResponse(
         access_token=pair.access_token,

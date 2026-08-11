@@ -6,6 +6,7 @@ from uuid import UUID
 
 from app.application.errors import UnauthorizedError
 from app.application.ports import (
+    AuditLog,
     AuthSessionRepository,
     PasswordHasher,
     TokenService,
@@ -13,6 +14,12 @@ from app.application.ports import (
 )
 from app.domain.entities import AuthSession, User
 from app.domain.ids import uuid7
+
+
+def mask_email(email: str) -> str:
+    """st***@demo.example: enough to investigate, not enough to identify."""
+    local, _, domain = email.partition("@")
+    return f"{local[:2]}***@{domain}" if domain else f"{local[:2]}***"
 
 
 @dataclass(frozen=True, slots=True)
@@ -29,6 +36,7 @@ class AuthService:
         sessions: AuthSessionRepository,
         hasher: PasswordHasher,
         tokens: TokenService,
+        audit: AuditLog,
         access_ttl_seconds: int,
         refresh_ttl_seconds: int,
     ) -> None:
@@ -36,19 +44,36 @@ class AuthService:
         self._sessions = sessions
         self._hasher = hasher
         self._tokens = tokens
+        self._audit = audit
         self._access_ttl = access_ttl_seconds
         self._refresh_ttl = refresh_ttl_seconds
 
     async def login(self, email: str, password: str) -> TokenPair:
-        user = await self._users.get_by_email(email.strip().lower())
+        normalized = email.strip().lower()
+        user = await self._users.get_by_email(normalized)
         # Verify against a constant dummy hash on unknown emails so response
         # timing does not reveal whether an account exists.
         if user is None:
             self._hasher.verify(_DUMMY_HASH, password)
+            await self._audit_failure(normalized)
             raise UnauthorizedError("Invalid email or password")
         if not self._hasher.verify(user.password_hash, password) or not user.is_active:
+            await self._audit_failure(normalized)
             raise UnauthorizedError("Invalid email or password")
+        await self._audit.record(
+            action="login_success",
+            organization_id=user.organization_id,
+            actor_id=user.id,
+        )
         return await self._issue_pair(user)
+
+    async def _audit_failure(self, email: str) -> None:
+        await self._audit.record(
+            action="login_failed",
+            organization_id=None,
+            actor_id=None,
+            detail={"email_masked": mask_email(email)},
+        )
 
     async def refresh(self, refresh_token: str) -> TokenPair:
         claims = self._tokens.decode(refresh_token, expected_type="refresh")

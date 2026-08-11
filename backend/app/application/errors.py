@@ -33,3 +33,12 @@ class ConflictError(AppError):
 class DomainValidationError(AppError):
     code = "validation_error"
     title = "Validation error"
+
+
+class RateLimitedError(AppError):
+    code = "rate_limited"
+    title = "Too many requests"
+
+    def __init__(self, detail: str, retry_after_seconds: int = 60) -> None:
+        super().__init__(detail)
+        self.retry_after_seconds = retry_after_seconds

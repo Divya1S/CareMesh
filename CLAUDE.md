@@ -14,7 +14,8 @@ Honesty rules that must never be broken (repeated here because they carry weight
 
 ## Current state
 
-- **Phase:** eval expansion (spec P13) complete (gate passed 2026-08-10). Next candidates: security hardening (P14), deployment docs (P16), final Staff Engineer review (P17)
+- **Phase:** security hardening (spec P14) complete (gate passed 2026-08-10). Next candidates: deployment docs (P16), final Staff Engineer review (P17)
+- **Security:** Redis rate limiting (login per address and account, AI endpoints per user; Redis's one documented use), append only `audit_logs` for login success and failure (masked emails), review decisions, claim decisions, and event republishes. `docs/SECURITY.md` (controls and honest gaps) and `docs/THREAT_MODEL.md` (threats, mitigations, failure modes). Note: the test suite raises LOGIN_ATTEMPTS_PER_MINUTE via env in conftest because fixtures log in constantly
 - **Evals:** three suites in `backend/evals/` (risk golden-v1 with escalation precision and recall, dira-v1 safety property checks, retrieval-v1 hit@k and MRR over real pgvector in a throwaway org), all gated at 100 percent in verify.sh via `--dataset all`. See `docs/EVALUATION.md`
 - **Observability:** `/metrics` on the API (HTTP, AI, workflow, outbox metrics; DB backed gauges refresh every 15s), Prometheus + Grafana provisioned dashboard behind `docker compose --profile observability up -d`. See `docs/OBSERVABILITY.md` for the catalog and what is deferred (worker metrics, tracing, alerting)
 - **P10:** eligibility checks go through the labeled `fake-payer-1` adapter (`# SIMULATED`, `app/infrastructure/payer/`); therapists submit claims for assigned patients at `/billing` (requires a passing check); payer staff review at `/payer` with required denial reasons, resubmission, and the full transition history rail. Claim states: submitted, approved, denied, resubmitted. Demo account payer@demo.caremesh.org

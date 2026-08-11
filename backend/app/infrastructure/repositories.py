@@ -24,6 +24,7 @@ from app.domain.workflows import WorkflowInstance, WorkflowTransition, WorkflowT
 from app.infrastructure import metrics
 from app.infrastructure.models import (
     AIRequestRow,
+    AuditLogRow,
     AuthSessionRow,
     CareAssignmentRow,
     ClaimRow,
@@ -283,6 +284,38 @@ class SqlEventOutbox:
                 published_at=None,
             )
         )
+
+
+class SqlAuditLog:
+    def __init__(self, session_factory) -> None:
+        # Own session per write, like the AI request log: failed attempts are
+        # exactly what an audit trail must keep when the request rolls back.
+        self._session_factory = session_factory
+
+    async def record(
+        self,
+        *,
+        action: str,
+        organization_id: UUID | None,
+        actor_id: UUID | None,
+        resource_type: str | None = None,
+        resource_id: UUID | None = None,
+        detail: dict | None = None,
+    ) -> None:
+        async with self._session_factory() as session:
+            session.add(
+                AuditLogRow(
+                    id=uuid7(),
+                    organization_id=organization_id,
+                    actor_id=actor_id,
+                    action=action,
+                    resource_type=resource_type,
+                    resource_id=resource_id,
+                    detail=detail or {},
+                    created_at=datetime.now(UTC),
+                )
+            )
+            await session.commit()
 
 
 class SqlAIRequestLog:

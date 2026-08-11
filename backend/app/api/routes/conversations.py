@@ -1,8 +1,13 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query
 
-from app.api.deps import ConversationServiceDep, CorrelationIdDep, CurrentUserDep
+from app.api.deps import (
+    ConversationServiceDep,
+    CorrelationIdDep,
+    CurrentUserDep,
+    enforce_ai_rate_limit,
+)
 from app.api.schemas import (
     ConversationCreateRequest,
     ConversationResponse,
@@ -71,7 +76,12 @@ async def list_messages(
     return [_message(m) for m in await service.list_messages(user, conversation_id, limit, offset)]
 
 
-@router.post("/{conversation_id}/messages", response_model=MessageResponse, status_code=201)
+@router.post(
+    "/{conversation_id}/messages",
+    response_model=MessageResponse,
+    status_code=201,
+    dependencies=[Depends(enforce_ai_rate_limit)],
+)
 async def post_message(
     conversation_id: UUID,
     body: MessageCreateRequest,

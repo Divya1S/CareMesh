@@ -22,6 +22,15 @@ TEST_DB_URL = os.environ.get(
     "TEST_DATABASE_URL",
     "postgresql+asyncpg://caremesh:caremesh_dev_password@localhost:5433/caremesh_test",
 )
+TEST_REDIS_URL = os.environ.get("TEST_REDIS_URL", "redis://localhost:6379/1")
+
+# The suite logs in with the same few emails dozens of times per minute;
+# the real brute force limit would trip constantly. The lockout test builds
+# its own limiter state instead.
+os.environ.setdefault("LOGIN_ATTEMPTS_PER_MINUTE", "100000")
+from app.infrastructure.settings import get_settings  # noqa: E402
+
+get_settings.cache_clear()
 
 TEST_PASSWORD = "test-password-1"
 # Hashed once at import time because Argon2 is deliberately slow.
@@ -47,13 +56,17 @@ def migrated() -> None:
 
 @pytest.fixture
 async def app(migrated):
+    from redis.asyncio import Redis
+
     from app.main import create_app
 
     application = create_app()
     engine = create_engine(TEST_DB_URL)
     application.state.engine = engine
     application.state.session_factory = create_session_factory(engine)
+    application.state.redis = Redis.from_url(TEST_REDIS_URL)
     yield application
+    await application.state.redis.aclose()
     async with engine.begin() as conn:
         await conn.execute(
             text(
@@ -62,7 +75,7 @@ async def app(migrated):
                 "ai_requests, risk_signals, risk_reviews, workflow_instances, "
                 "workflow_transitions, documents, document_chunks, rag_retrievals, "
                 "referrals, guardian_links, guardian_updates, claims, eligibility_checks, "
-                "guardian_notifications CASCADE"
+                "guardian_notifications, audit_logs CASCADE"
             )
         )
     await engine.dispose()

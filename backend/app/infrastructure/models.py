@@ -389,6 +389,26 @@ class ClaimRow(Base):
     created_at: Mapped[datetime] = _created_at()
 
 
+class AuditLogRow(Base):
+    """Append only audit trail for sensitive actions. Complements the domain
+    event log: auth has no events, and admin actions deserve their own trail.
+    Detail payloads carry no clinical text and no full credentials."""
+
+    __tablename__ = "audit_logs"
+    __table_args__ = (Index("ix_audit_logs_org_created", "organization_id", "created_at"),)
+
+    id: Mapped[UUID] = _uuid_pk()
+    organization_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("organizations.id"), nullable=True
+    )
+    actor_id: Mapped[UUID | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    action: Mapped[str] = mapped_column(String(100), nullable=False)
+    resource_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    resource_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True), nullable=True)
+    detail: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    created_at: Mapped[datetime] = _created_at()
+
+
 class CareAssignmentRow(Base):
     __tablename__ = "care_assignments"
     __table_args__ = (

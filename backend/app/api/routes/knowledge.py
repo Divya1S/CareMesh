@@ -1,6 +1,11 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
-from app.api.deps import CorrelationIdDep, CurrentUserDep, KnowledgeServiceDep
+from app.api.deps import (
+    CorrelationIdDep,
+    CurrentUserDep,
+    KnowledgeServiceDep,
+    enforce_ai_rate_limit,
+)
 from app.api.schemas import (
     AskRequest,
     AskResponse,
@@ -41,7 +46,7 @@ async def ingest_document(
     )
 
 
-@router.post("/ask", response_model=AskResponse)
+@router.post("/ask", response_model=AskResponse, dependencies=[Depends(enforce_ai_rate_limit)])
 async def ask(
     body: AskRequest,
     user: CurrentUserDep,

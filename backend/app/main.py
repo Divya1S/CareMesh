@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from redis.asyncio import Redis
 
 from app.api.middleware import CorrelationIdMiddleware
 from app.api.problems import register_exception_handlers
@@ -32,9 +33,11 @@ async def lifespan(app: FastAPI):
     engine = create_engine(settings.database_url)
     app.state.engine = engine
     app.state.session_factory = create_session_factory(engine)
+    app.state.redis = Redis.from_url(settings.redis_url)
     gauge_task = asyncio.create_task(run_gauge_refresher(app.state.session_factory))
     yield
     gauge_task.cancel()
+    await app.state.redis.aclose()
     await engine.dispose()
 
 

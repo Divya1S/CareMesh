@@ -11,6 +11,7 @@ from app.application.errors import (
     DomainValidationError,
     ForbiddenError,
     NotFoundError,
+    RateLimitedError,
     UnauthorizedError,
 )
 
@@ -20,6 +21,7 @@ _STATUS_BY_ERROR: dict[type[AppError], int] = {
     NotFoundError: 404,
     ConflictError: 409,
     DomainValidationError: 422,
+    RateLimitedError: 429,
 }
 
 logger = structlog.get_logger()
@@ -46,6 +48,8 @@ def register_exception_handlers(app: FastAPI) -> None:
         response = _problem(request, status, exc.code, exc.title, exc.detail)
         if status == 401:
             response.headers["WWW-Authenticate"] = "Bearer"
+        if isinstance(exc, RateLimitedError):
+            response.headers["Retry-After"] = str(exc.retry_after_seconds)
         return response
 
     @app.exception_handler(RequestValidationError)

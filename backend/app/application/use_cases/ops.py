@@ -14,10 +14,11 @@ def ensure_ops(actor: User) -> None:
 
 
 class OpsService:
-    def __init__(self, workflows, ai_requests, events) -> None:
+    def __init__(self, workflows, ai_requests, events, audit) -> None:
         self._workflows = workflows
         self._ai_requests = ai_requests
         self._events = events
+        self._audit = audit
 
     async def list_workflows(self, actor: User, state: str | None, limit: int):
         ensure_ops(actor)
@@ -54,3 +55,11 @@ class OpsService:
         if event is None:
             raise NotFoundError("Event not found")
         await self._events.mark_unpublished(event_id)
+        await self._audit.record(
+            action="event_republished",
+            organization_id=actor.organization_id,
+            actor_id=actor.id,
+            resource_type="domain_event",
+            resource_id=event_id,
+            detail={"event_type": event.event_type},
+        )

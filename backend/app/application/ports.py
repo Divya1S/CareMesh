@@ -59,6 +59,22 @@ class CareAssignmentRepository(Protocol):
     ) -> list[UUID]: ...
 
 
+class AuditLog(Protocol):
+    """Records sensitive actions. Implementations write in their own session
+    so an audit entry survives the caller's rollback."""
+
+    async def record(
+        self,
+        *,
+        action: str,
+        organization_id: UUID | None,
+        actor_id: UUID | None,
+        resource_type: str | None = None,
+        resource_id: UUID | None = None,
+        detail: dict | None = None,
+    ) -> None: ...
+
+
 class EventOutbox(Protocol):
     """Writes domain events in the caller's transaction (ADR 0003)."""
 

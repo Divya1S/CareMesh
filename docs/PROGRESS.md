@@ -5,13 +5,13 @@
 
 ## Current phase
 
-**Eval expansion (spec P13): COMPLETE. Gate passed on 2026-08-10** (95
-backend tests, 13 frontend tests, 17/17 eval cases across three suites).
-Earlier the same day: the vertical slice S1 to S7, RAG (P6), school and
-guardian (P9), payer (P10), observability (P12).
+**Security hardening (spec P14): COMPLETE. Gate passed on 2026-08-10**
+(101 backend tests, 13 frontend tests, 17/17 eval cases). Earlier the
+same day: the vertical slice S1 to S7, RAG (P6), school and guardian
+(P9), payer (P10), observability (P12), eval expansion (P13).
 
-Next candidates, pick with the human: security hardening (P14),
-deployment docs (P16), the final Staff Engineer review (P17).
+Next candidates, pick with the human: deployment docs (P16), the final
+Staff Engineer review (P17).
 Phase 0 was approved by the human on 2026-08-10 and the approved plan is
 `docs/PHASE_0_PROPOSAL.md` (roadmap in section 11). All frontend work follows
 `docs/DESIGN.md` (added by the human; authoritative).
@@ -285,9 +285,27 @@ Phase 0 was approved by the human on 2026-08-10 and the approved plan is
     docs/EVALUATION.md, including the HumanReviewCompleted feedback loop
     noted as future work.
 
+- 2026-08-10, security hardening (P14), validated by `./scripts/verify.sh`:
+  - Rate limiting backed by Redis (its first and only documented use,
+    justified in `app/infrastructure/rate_limit.py`): login attempts per
+    client address and target account (5/minute default), AI bearing
+    endpoints per user (20/minute default), 429 problem details with
+    Retry-After. Migration `988a3b6bf521` adds `audit_logs`.
+  - Append only audit trail written in its own transaction so it survives
+    request rollbacks: login_success, login_failed (masked email only,
+    tested that the full address never appears), review_decided,
+    claim_decided, event_republished.
+  - docs/SECURITY.md (existing controls, deliberate limitations like
+    localStorage tokens, and what a real deployment would need) and
+    docs/THREAT_MODEL.md (assets, boundaries, threats with mitigations or
+    explicit gaps, and the safety failure mode analysis).
+  - Test note: conftest raises LOGIN_ATTEMPTS_PER_MINUTE via env because
+    fixtures log in constantly; the lockout test seeds limiter state
+    directly and asserts the 429 path.
+
 ## In flight
 
-- Nothing. P13 closed cleanly, working tree committed.
+- Nothing. P14 closed cleanly, working tree committed.
 
 ## Known limitations (intentional, coming in later phases)
 

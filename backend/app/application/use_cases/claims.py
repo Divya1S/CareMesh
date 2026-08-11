@@ -31,12 +31,15 @@ class ClaimView:
 
 
 class ClaimsService:
-    def __init__(self, claims, workflows, assignments, adapter: PayerAdapter, outbox) -> None:
+    def __init__(
+        self, claims, workflows, assignments, adapter: PayerAdapter, outbox, audit
+    ) -> None:
         self._claims = claims
         self._workflows = workflows
         self._assignments = assignments
         self._adapter = adapter
         self._outbox = outbox
+        self._audit = audit
 
     async def check_eligibility(self, actor: User, member_id: str) -> dict:
         self._ensure(actor, Role.THERAPIST)
@@ -171,6 +174,14 @@ class ClaimsService:
         )
         await self._claims.set_denial_reason(
             claim.id, denial_reason.strip() if not approve and denial_reason else None
+        )
+        await self._audit.record(
+            action="claim_decided",
+            organization_id=actor.organization_id,
+            actor_id=actor.id,
+            resource_type="claim",
+            resource_id=claim.id,
+            detail={"decision": target.value},
         )
         await self._outbox.add(
             domain_events.insurance_claim_updated(

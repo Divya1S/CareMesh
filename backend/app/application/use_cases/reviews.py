@@ -22,13 +22,14 @@ class ReviewQueueItem:
 
 
 class ReviewService:
-    def __init__(self, workflows, risks, assignments, users, messages, outbox) -> None:
+    def __init__(self, workflows, risks, assignments, users, messages, outbox, audit) -> None:
         self._workflows = workflows
         self._risks = risks
         self._assignments = assignments
         self._users = users
         self._messages = messages
         self._outbox = outbox
+        self._audit = audit
 
     async def list_pending(self, actor: User) -> list[ReviewQueueItem]:
         self._ensure_therapist(actor)
@@ -96,6 +97,14 @@ class ReviewService:
             actor=str(actor.id),
             reason=f"review {decision.value}",
             now=now,
+        )
+        await self._audit.record(
+            action="review_decided",
+            organization_id=actor.organization_id,
+            actor_id=actor.id,
+            resource_type="risk_signal",
+            resource_id=signal.id,
+            detail={"decision": decision.value, "severity_override": severity_override},
         )
         await self._outbox.add(
             domain_events.human_review_completed(

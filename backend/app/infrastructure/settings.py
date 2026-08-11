@@ -21,6 +21,12 @@ class Settings(BaseSettings):
 
     cors_origins: list[str] = ["http://localhost:3000"]
 
+    redis_url: str = "redis://localhost:6379/0"
+    # Brute force protection: attempts per email and client address.
+    login_attempts_per_minute: int = 5
+    # Cost control on AI bearing endpoints, per user.
+    ai_requests_per_minute: int = 20
+
     # ADR 0002: the fake provider is the default; real providers are opt in
     # and are the only thing in this project that can cost money.
     llm_provider: str = "fake"
