@@ -14,7 +14,8 @@ Honesty rules that must never be broken (repeated here because they carry weight
 
 ## Current state
 
-- **Phase:** payer workflows (spec P10) complete (gate passed 2026-08-10). All ten spec surfaces now exist in a real minimal form. Next candidates: observability compose profile, eval expansion, security hardening, deployment docs, final review
+- **Phase:** observability (spec P12) complete (gate passed 2026-08-10). Next candidates: eval expansion (P13), security hardening (P14), deployment docs (P16), final Staff Engineer review (P17)
+- **Observability:** `/metrics` on the API (HTTP, AI, workflow, outbox metrics; DB backed gauges refresh every 15s), Prometheus + Grafana provisioned dashboard behind `docker compose --profile observability up -d`. See `docs/OBSERVABILITY.md` for the catalog and what is deferred (worker metrics, tracing, alerting)
 - **P10:** eligibility checks go through the labeled `fake-payer-1` adapter (`# SIMULATED`, `app/infrastructure/payer/`); therapists submit claims for assigned patients at `/billing` (requires a passing check); payer staff review at `/payer` with required denial reasons, resubmission, and the full transition history rail. Claim states: submitted, approved, denied, resubmitted. Demo account payer@demo.caremesh.org
 - **P9:** school staff see a names only roster and submit referrals (real workflow: submitted, accepted, declined); accepting assigns the therapist and notifies linked guardians. Guardians see only explicitly shared items (guardian_links gates everything): care updates written for them, notifications, resources. Surfaces at `/school` and `/guardian`; demo accounts school@ and guardian@demo.caremesh.org
 - **RAG:** real pipeline (ADR 0006): versioned documents chunked and embedded (local lexical hashing, EMBEDDING_PROVIDER env var) into pgvector, tenant scoped cosine search plus keyword rerank, grounded answers with citations through the `knowledge_answer` prompt, retrieval trail in `rag_retrievals`. API under `/api/v1/knowledge`; student surface at `/resources`; ingestion is ops_admin only
@@ -53,6 +54,8 @@ scripts/          verify.sh (phase gate), e2e.sh (browser journey), gen-api-type
 ```bash
 # Full local stack
 docker compose up -d
+# Observability (Prometheus 9090, Grafana 3001), off by default
+docker compose --profile observability up -d
 
 # Backend
 cd backend && uv sync                     # or: pip install -e ".[dev]"

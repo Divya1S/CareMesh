@@ -1,4 +1,5 @@
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Request, Response
+from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from sqlalchemy import text
 
 router = APIRouter(tags=["health"])
@@ -10,3 +11,8 @@ async def healthz(request: Request) -> dict:
     async with session_factory() as session:
         await session.execute(text("SELECT 1"))
     return {"status": "ok", "database": "ok"}
+
+
+@router.get("/metrics", include_in_schema=False)
+async def metrics_endpoint() -> Response:
+    return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)

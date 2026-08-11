@@ -5,6 +5,7 @@ import time
 import structlog
 
 from app.domain.ids import uuid7
+from app.infrastructure.metrics import HTTP_DURATION, HTTP_REQUESTS, normalize_path
 
 logger = structlog.get_logger()
 
@@ -39,10 +40,16 @@ class CorrelationIdMiddleware:
         try:
             await self.app(scope, receive, send_wrapper)
         finally:
+            duration = time.perf_counter() - started
+            path = normalize_path(scope["path"])
+            HTTP_REQUESTS.labels(
+                method=scope["method"], path=path, status=str(status_holder["status"])
+            ).inc()
+            HTTP_DURATION.labels(method=scope["method"], path=path).observe(duration)
             logger.info(
                 "http_request",
                 method=scope["method"],
                 path=scope["path"],
                 status=status_holder["status"],
-                duration_ms=round((time.perf_counter() - started) * 1000, 1),
+                duration_ms=round(duration * 1000, 1),
             )

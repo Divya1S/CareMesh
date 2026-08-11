@@ -1,0 +1,134 @@
+{
+  "uid": "caremesh-overview",
+  "title": "CareMesh overview",
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "refresh": "15s",
+  "time": { "from": "now-30m", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "HTTP request rate by status",
+      "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "caremesh-prometheus" },
+      "fieldConfig": {
+        "defaults": { "unit": "reqps", "color": { "mode": "palette-classic" } },
+        "overrides": [
+          { "matcher": { "id": "byRegexp", "options": ".*2..*" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#3E7C4F" } }] },
+          { "matcher": { "id": "byRegexp", "options": ".*4..*" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#BE5B2A" } }] },
+          { "matcher": { "id": "byRegexp", "options": ".*5..*" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#8F2D24" } }] }
+        ]
+      },
+      "targets": [
+        {
+          "expr": "sum by (status) (rate(caremesh_http_requests_total[1m]))",
+          "legendFormat": "{{status}}"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "HTTP p95 latency",
+      "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "caremesh-prometheus" },
+      "fieldConfig": {
+        "defaults": { "unit": "s", "color": { "mode": "fixed", "fixedColor": "#A63E56" } },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(caremesh_http_request_duration_seconds_bucket[5m])))",
+          "legendFormat": "p95"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "AI requests by prompt and outcome",
+      "gridPos": { "x": 0, "y": 8, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "caremesh-prometheus" },
+      "fieldConfig": {
+        "defaults": { "unit": "reqps", "color": { "mode": "fixed", "fixedColor": "#9C6B1E" } },
+        "overrides": [
+          { "matcher": { "id": "byRegexp", "options": ".*(validation_failed|timeout|provider_error).*" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#8F2D24" } }] }
+        ]
+      },
+      "targets": [
+        {
+          "expr": "sum by (prompt, status) (rate(caremesh_ai_requests_total[5m]))",
+          "legendFormat": "{{prompt}} {{status}}"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "AI tokens (total)",
+      "gridPos": { "x": 12, "y": 8, "w": 4, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "caremesh-prometheus" },
+      "fieldConfig": { "defaults": { "color": { "mode": "fixed", "fixedColor": "#9C6B1E" } }, "overrides": [] },
+      "targets": [{ "expr": "sum(caremesh_ai_tokens_total)", "legendFormat": "tokens" }]
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "AI spend (USD)",
+      "gridPos": { "x": 16, "y": 8, "w": 4, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "caremesh-prometheus" },
+      "fieldConfig": { "defaults": { "unit": "currencyUSD", "color": { "mode": "fixed", "fixedColor": "#3E7C4F" } }, "overrides": [] },
+      "targets": [{ "expr": "caremesh_ai_cost_usd_total", "legendFormat": "cost" }]
+    },
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "Review queue",
+      "gridPos": { "x": 20, "y": 8, "w": 4, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "caremesh-prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "#3E7C4F", "value": null }, { "color": "#BE5B2A", "value": 1 }, { "color": "#8F2D24", "value": 5 } ] }
+        },
+        "overrides": []
+      },
+      "targets": [{ "expr": "caremesh_review_queue_depth", "legendFormat": "pending" }]
+    },
+    {
+      "id": 7,
+      "type": "stat",
+      "title": "Outbox waiting for relay",
+      "gridPos": { "x": 12, "y": 12, "w": 4, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "caremesh-prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "#3E7C4F", "value": null }, { "color": "#BE5B2A", "value": 10 }, { "color": "#8F2D24", "value": 100 } ] }
+        },
+        "overrides": []
+      },
+      "targets": [{ "expr": "caremesh_outbox_unpublished", "legendFormat": "unpublished" }]
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Workflows by state",
+      "gridPos": { "x": 16, "y": 12, "w": 8, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "caremesh-prometheus" },
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "fixed", "fixedColor": "#872F45" } },
+        "overrides": [
+          { "matcher": { "id": "byRegexp", "options": ".*pending.*|.*submitted.*" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#BE5B2A" } }] }
+        ]
+      },
+      "targets": [
+        {
+          "expr": "sum by (workflow_type, state) (caremesh_workflows_by_state)",
+          "legendFormat": "{{workflow_type}} {{state}}"
+        }
+      ]
+    }
+  ]
+}

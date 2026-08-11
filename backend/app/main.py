@@ -1,5 +1,6 @@
 """FastAPI app factory. Route handlers stay thin; logic lives in the application layer."""
 
+import asyncio
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -19,6 +20,7 @@ from app.api.routes import (
     school,
 )
 from app.infrastructure.db import create_engine, create_session_factory
+from app.infrastructure.gauges import run_gauge_refresher
 from app.infrastructure.logging import configure_logging
 from app.infrastructure.settings import get_settings
 
@@ -30,7 +32,9 @@ async def lifespan(app: FastAPI):
     engine = create_engine(settings.database_url)
     app.state.engine = engine
     app.state.session_factory = create_session_factory(engine)
+    gauge_task = asyncio.create_task(run_gauge_refresher(app.state.session_factory))
     yield
+    gauge_task.cancel()
     await engine.dispose()
 
 

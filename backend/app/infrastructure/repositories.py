@@ -21,6 +21,7 @@ from app.domain.ids import uuid7
 from app.domain.knowledge import Document, DocumentChunk, DocumentStatus, RetrievedChunk
 from app.domain.risk import RiskReview, RiskSignal
 from app.domain.workflows import WorkflowInstance, WorkflowTransition, WorkflowType
+from app.infrastructure import metrics
 from app.infrastructure.models import (
     AIRequestRow,
     AuthSessionRow,
@@ -291,6 +292,18 @@ class SqlAIRequestLog:
         self._session_factory = session_factory
 
     async def add(self, entry: AIRequestLogEntry) -> None:
+        metrics.AI_REQUESTS.labels(
+            provider=entry.provider,
+            prompt=entry.prompt_name,
+            status=entry.status,
+            simulated=str(entry.simulated).lower(),
+        ).inc()
+        metrics.AI_TOKENS.labels(direction="input").inc(entry.input_tokens)
+        metrics.AI_TOKENS.labels(direction="output").inc(entry.output_tokens)
+        metrics.AI_COST.inc(entry.cost_usd)
+        await self._persist(entry)
+
+    async def _persist(self, entry: AIRequestLogEntry) -> None:
         async with self._session_factory() as session:
             session.add(
                 AIRequestRow(
