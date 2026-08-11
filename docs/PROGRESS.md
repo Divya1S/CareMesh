@@ -5,10 +5,27 @@
 
 ## Current phase
 
-**Hiring upgrade plan (approved 2026-08-10): H1, H2, H3 complete. H4
-(real provider adapters, needs the user's free Gemini key) next, then H5
-(MCP server) and H6 (Dockerfiles, deployment docs, load numbers, final
-review).**
+**Hiring upgrade plan (approved 2026-08-10): H1 through H4 complete. H5
+(MCP server) next, then H6 (Dockerfiles, deployment docs, load numbers,
+final review).**
+
+- H4 done 2026-08-11 (gate green; 112 backend tests): real Gemini
+  adapter (`infrastructure/ai/gemini_provider.py`, plain httpx, no
+  vendor SDK) behind the existing gateway: completions, structured JSON
+  output, tool call mapping (functionCall and functionResponse pairs),
+  and SSE streaming. Selected by LLM_PROVIDER=gemini plus LLM_API_KEY
+  (the user's free tier key lives only in gitignored backend/.env; it
+  briefly sat in the tracked .env.example under a typo name but was
+  moved before any commit, so it never reached git history).
+  `scripts/live_check.py` is the opt in proof, never in verify.sh or
+  CI; it passed 3/3 live: real reply, schema validated risk
+  classification (low_mood severity 1), and a stream, all audited with
+  simulated=false at $0. Scope decision with the user: no Anthropic or
+  OpenAI adapters (no free tier breaks the zero cost rule and a second
+  identical adapter adds no signal); an Ollama adapter is the
+  documented next free provider. Gotcha: gemini-2.5-flash is retired
+  for new accounts (404), so the default model is the rolling
+  gemini-flash-latest alias.
 
 - H3 done 2026-08-11 (gate green; 23 gated eval cases): fastembed
   semantic embeddings (BAAI/bge-small-en-v1.5, local ONNX, one time
