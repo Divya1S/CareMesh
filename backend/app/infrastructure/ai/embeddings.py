@@ -24,6 +24,11 @@ _WORD = re.compile(r"[a-z0-9']+")
 class EmbeddingProvider(Protocol):
     name: str
     dim: int
+    # Blended score below which retrieval declines to answer. Absolute
+    # similarity thresholds do NOT transfer between embedding spaces:
+    # lexical cosine sits near zero for unrelated text, dense models sit
+    # near 0.3. Each provider carries its own measured cutoff.
+    min_answer_score: float
 
     def embed(self, texts: list[str]) -> list[list[float]]: ...
 
@@ -38,6 +43,7 @@ def _bucket(token: str) -> tuple[int, float]:
 class LocalLexicalEmbedding:
     name = "local-lexical-v1"
     dim = EMBEDDING_DIM
+    min_answer_score = 0.05
 
     def embed(self, texts: list[str]) -> list[list[float]]:
         return [self._embed_one(text) for text in texts]
@@ -55,10 +61,33 @@ class LocalLexicalEmbedding:
         return [v / norm for v in vector]
 
 
+class FastembedEmbedding:
+    """Real semantic embeddings, free and local: BAAI/bge-small-en-v1.5
+    through fastembed (ONNX, no torch). First use downloads the model
+    (about 90MB, approved); afterwards it runs fully offline. 384
+    dimensions, matching the pgvector column."""
+
+    name = "fastembed-bge-small-en-v1.5"
+    dim = EMBEDDING_DIM
+    # Measured on the eval corpus: true matches score 0.42 and up, off
+    # domain queries top out near 0.32 (blended cosine plus keyword score).
+    min_answer_score = 0.38
+
+    def __init__(self) -> None:
+        from fastembed import TextEmbedding  # imported lazily: heavy
+
+        self._model = TextEmbedding("BAAI/bge-small-en-v1.5")
+
+    def embed(self, texts: list[str]) -> list[list[float]]:
+        return [vector.tolist() for vector in self._model.embed(texts)]
+
+
 def create_embedding_provider(name: str) -> EmbeddingProvider:
     if name == "local_lexical":
         return LocalLexicalEmbedding()
+    if name == "fastembed":
+        return FastembedEmbedding()
     raise RuntimeError(
-        f"Unknown EMBEDDING_PROVIDER: {name}. Semantic providers land when "
-        "they are deliberately switched on; dev runs on local_lexical."
+        f"Unknown EMBEDDING_PROVIDER: {name}. Use local_lexical (default, "
+        "no downloads) or fastembed (semantic, one time model download)."
     )

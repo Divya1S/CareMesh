@@ -16,7 +16,7 @@ from sqlalchemy import delete
 from app.application.use_cases.knowledge import MIN_SCORE, RETRIEVE_K, rerank
 from app.domain.entities import Organization, Role, User
 from app.domain.ids import uuid7
-from app.infrastructure.ai.embeddings import LocalLexicalEmbedding
+from app.infrastructure.ai.embeddings import create_embedding_provider
 from app.infrastructure.db import create_engine, create_session_factory
 from app.infrastructure.models import DocumentChunkRow, DocumentRow, OrganizationRow, UserRow
 from app.infrastructure.repositories import (
@@ -56,6 +56,28 @@ QUERIES = [
         "query": "zebra quantum warp drive maintenance",
         "expected_source": None,  # must retrieve nothing above the threshold
     },
+    # Paraphrase cases: little or no shared vocabulary with the corpus.
+    # Lexical embeddings are expected to miss these (reported, not gated);
+    # a semantic provider is gated on them. This is the honest boundary of
+    # ADR 0006's lexical default.
+    {
+        "id": "para-tossing-turning",
+        "query": "I keep tossing and turning at night when finals are coming",
+        "expected_source": "sleep-exam-season",
+        "semantic_only": True,
+    },
+    {
+        "id": "para-panic",
+        "query": "ways to steady myself when panic suddenly hits",
+        "expected_source": "grounding-techniques",
+        "semantic_only": True,
+    },
+    {
+        "id": "para-counseling",
+        "query": "my teacher put my name forward for counseling, what now",
+        "expected_source": "after-a-referral",
+        "semantic_only": True,
+    },
 ]
 
 
@@ -64,7 +86,8 @@ async def run_retrieval_suite() -> dict:
 
     engine = create_engine(EVAL_DB_URL)
     session_factory = create_session_factory(engine)
-    embedder = LocalLexicalEmbedding()
+    embedder = create_embedding_provider(os.environ.get("EMBEDDING_PROVIDER", "local_lexical"))
+    semantic = embedder.name != "local-lexical-v1"
     now = datetime.now(UTC)
     org = Organization(id=uuid7(), name=f"eval-{uuid7()}", created_at=now)
     ops = User(
@@ -100,12 +123,13 @@ async def run_retrieval_suite() -> dict:
             chunks = SqlChunkRepository(session)
             for case in QUERIES:
                 embedding = embedder.embed([case["query"]])[0]
-                candidates = await chunks.search(org.id, embedding, RETRIEVE_K)
-                ranked = [c for c in rerank(case["query"], candidates) if c.score >= MIN_SCORE]
+                candidates = await chunks.search(org.id, embedding, RETRIEVE_K, embedder.name)
+                cutoff = getattr(embedder, "min_answer_score", MIN_SCORE)
+                ranked = [c for c in rerank(case["query"], candidates) if c.score >= cutoff]
                 retrieved_sources = [source_by_doc[c.chunk.document_id] for c in ranked]
                 expected = case["expected_source"]
                 if expected is None:
-                    passed = len(ranked) == 0
+                    hit = len(ranked) == 0
                     rank = None
                 else:
                     rank = (
@@ -113,14 +137,19 @@ async def run_retrieval_suite() -> dict:
                         if expected in retrieved_sources
                         else None
                     )
-                    passed = rank == 1
+                    hit = rank == 1
+                # Paraphrase cases gate only semantic providers; under the
+                # lexical default they are informational.
+                gated = semantic or not case.get("semantic_only")
                 results.append(
                     {
                         "id": case["id"],
                         "expected": expected,
                         "retrieved": retrieved_sources[:3],
                         "rank": rank,
-                        "passed": passed,
+                        "hit": hit,
+                        "gated": gated,
+                        "passed": hit if gated else True,
                     }
                 )
         return {
@@ -151,6 +180,8 @@ def _positives(results: list[dict]) -> list[dict]:
 
 
 def _hit_rate(results: list[dict], k: int) -> float:
+    """Computed over every positive case, gated or not, so the lexical and
+    semantic runs are directly comparable."""
     positives = _positives(results)
     if not positives:
         return 0.0

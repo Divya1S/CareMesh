@@ -270,6 +270,10 @@ class DocumentChunkRow(Base):
     chunk_index: Mapped[int] = mapped_column(nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
     embedding: Mapped[list[float]] = mapped_column(Vector(EMBEDDING_DIM), nullable=False)
+    # Vectors from different embedders never mix in one similarity search.
+    embedding_provider: Mapped[str] = mapped_column(
+        String(50), nullable=False, default="local-lexical-v1"
+    )
     created_at: Mapped[datetime] = _created_at()
 
 

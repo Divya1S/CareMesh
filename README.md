@@ -26,7 +26,8 @@ an evaluation and observability layer that gates every change.
 
 | Capability | Where it lives |
 |---|---|
-| **LLM app engineering** | A central AI Gateway (`backend/app/application/ai/gateway.py`): prompt registry with versions, structured output validation with bounded retry, timeouts, and full auditing of every call (model, prompt version, tokens, cost, latency, outcome) |
+| **LLM app engineering** | A central AI Gateway (`backend/app/application/ai/gateway.py`): prompt registry with versions, structured output validation with bounded retry, timeouts, streamed replies over SSE, and full auditing of every call (model, prompt version, tokens, cost, latency, tool calls, outcome) |
+| **Agentic tool calling** | A bounded tool loop with allow listed, tenant scoped tools (ADR 0007): Dira searches the resource library (agentic RAG with citations) and files appointment requests as real workflows the care team acknowledges; crisis disclosures bypass tools, gated by evals |
 | **RAG that is real** | Versioned documents, paragraph chunking with overlap, embeddings in pgvector with an HNSW index, tenant scoped cosine search plus keyword rerank, grounded answers with visible cited vs retrieved sources, and a stored retrieval trail per question |
 | **Evals as a gate** | Three deterministic suites (risk classification with escalation precision and recall, Dira reply safety properties, retrieval hit@k and MRR), run in CI and locally, gated at 100 percent; results stored with model and dataset versions plus latency, token, and cost usage |
 | **AI safety architecture** | The model never decides: escalation is deterministic domain code over structured output; crisis paths route to human review; clinician accept, edit, and reject are explicit audited acts; prompt injection cases are regression tested |
@@ -79,13 +80,19 @@ workflow, AI call, and event, including replaying events safely.
 
 | Metric | Value |
 |---|---|
-| Backend tests (unit + integration against real Postgres, Redis, Redpanda) | 101 |
+| Backend tests (unit + integration against real Postgres, Redis, Redpanda) | 105 |
 | Frontend tests | 13 |
-| Gated eval cases (risk, Dira safety, retrieval) | 17/17 |
+| Gated eval cases (risk, Dira safety and tool use, retrieval) | 23/23 |
 | Escalation precision / recall on the eval set | 1.0 / 1.0 |
-| Retrieval hit@1 / MRR on the eval corpus | 1.0 / 1.0 |
+| Retrieval hit@1 / MRR: lexical embeddings (default) | 0.5 / 0.583 |
+| Retrieval hit@1 / MRR: semantic embeddings (fastembed, local) | 1.0 / 1.0 |
 | Total AI spend across all development | $0.00 |
 | External paid services required | none |
+
+The retrieval rows are the same suite run under both embedding providers;
+the paraphrase cases lexical misses and semantic finds, plus the per
+provider no answer thresholds that keep off domain refusal working in
+both spaces, are written up in [docs/EVALUATION.md](docs/EVALUATION.md).
 
 ## Quickstart
 
@@ -135,10 +142,13 @@ docker compose --profile observability up -d
   as real adapters. Tests and evals are reproducible and free, and the
   simulated flag flows from the provider through the audit log to a badge
   on every AI element in the UI.
-- **Lexical embeddings as the honest default.** Retrieval uses hashing
-  based lexical embeddings (real information retrieval, zero cost, no
-  model download) with the upgrade path to semantic embeddings behind an
-  env var. See ADR 0006.
+- **Two embedding providers, measured against each other.** The default
+  is hashing based lexical embeddings (real retrieval, zero cost, no
+  downloads); `EMBEDDING_PROVIDER=fastembed` switches to a local semantic
+  model (bge-small, ONNX). Chunks record their embedding space, search
+  never mixes spaces, and each provider carries a measured no answer
+  threshold, because absolute similarity cutoffs do not transfer between
+  spaces. See ADR 0006 and the comparison in docs/EVALUATION.md.
 - **Redpanda over Kafka.** Same wire protocol and client code, a fraction
   of the laptop footprint. See ADR 0001.
 - **Events carry ids, never clinical text.** Consumers fetch content from

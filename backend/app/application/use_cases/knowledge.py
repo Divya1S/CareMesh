@@ -126,7 +126,7 @@ class KnowledgeService:
         embeddings = self._embedder.embed(pieces)
         for index, (piece, embedding) in enumerate(zip(pieces, embeddings, strict=True)):
             await self._chunks.add(
-                DocumentChunk(
+                chunk=DocumentChunk(
                     id=uuid7(),
                     document_id=document.id,
                     organization_id=actor.organization_id,
@@ -134,7 +134,8 @@ class KnowledgeService:
                     content=piece,
                     created_at=now,
                 ),
-                embedding,
+                embedding=embedding,
+                provider=self._embedder.name,
             )
         await self._documents.set_status(document.id, DocumentStatus.READY)
         if latest and latest.status == DocumentStatus.READY:
@@ -148,8 +149,11 @@ class KnowledgeService:
         """Tenant scoped retrieval with rerank, shared by ask and by Dira's
         search_resources tool."""
         query_embedding = self._embedder.embed([question])[0]
-        candidates = await self._chunks.search(organization_id, query_embedding, RETRIEVE_K)
-        ranked = [c for c in rerank(question, candidates) if c.score >= MIN_SCORE]
+        candidates = await self._chunks.search(
+            organization_id, query_embedding, RETRIEVE_K, self._embedder.name
+        )
+        cutoff = getattr(self._embedder, "min_answer_score", MIN_SCORE)
+        ranked = [c for c in rerank(question, candidates) if c.score >= cutoff]
         return ranked[:ANSWER_WITH_TOP]
 
     async def ask(self, actor: User, question: str, correlation_id: str | None) -> KnowledgeAnswer:

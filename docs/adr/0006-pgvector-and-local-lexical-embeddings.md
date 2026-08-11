@@ -39,5 +39,18 @@ Two parts:
   plainly, and retrieval quality metrics land with the eval expansion phase.
 - Swapping in a semantic provider later changes one env var and requires a
   re-ingest (embedding dimensions may change: new migration at that point).
+
+## Update (2026-08-11)
+
+A real semantic provider landed: `EMBEDDING_PROVIDER=fastembed` runs
+BAAI/bge-small-en-v1.5 locally through ONNX (one time ~90MB download, then
+offline; 384 dimensions, so no schema change). Chunks record which
+provider embedded them and similarity search filters to the querying
+provider's vectors, because mixing embedding spaces produces garbage.
+Each provider carries its own measured no answer threshold; the measured
+comparison (lexical hit@1 0.5 vs semantic 1.0 on the eval suite, off
+domain refusal preserved for both) lives in docs/EVALUATION.md.
+`scripts/reingest.py` re-embeds stored chunks after a switch. The lexical
+default remains for tests and CI: free, instant, no downloads.
 - The dev Postgres volume was reset once for the image swap (alpine to the
   pgvector debian build); seed data recreates everything.

@@ -5,8 +5,23 @@
 
 ## Current phase
 
-**Hiring upgrade plan (approved 2026-08-10): H1 and H2 complete, H3
-(semantic embeddings) next.**
+**Hiring upgrade plan (approved 2026-08-10): H1, H2, H3 complete. H4
+(real provider adapters, needs the user's free Gemini key) next, then H5
+(MCP server) and H6 (Dockerfiles, deployment docs, load numbers, final
+review).**
+
+- H3 done 2026-08-11 (gate green; 23 gated eval cases): fastembed
+  semantic embeddings (BAAI/bge-small-en-v1.5, local ONNX, one time
+  ~90MB download, 384 dims so no schema change) behind
+  EMBEDDING_PROVIDER; chunks record their embedding provider and search
+  filters to one space (migration 8b6cb465d1ab);
+  `scripts/reingest.py` re-embeds after a switch. Measured comparison on
+  the retrieval suite: lexical hit@1 0.5 / MRR 0.583, semantic 1.0 /
+  1.0, three paraphrase cases lexical misses and semantic finds at rank
+  one. Real finding recorded in ADR 0006 and EVALUATION.md: absolute
+  similarity thresholds do not transfer between embedding spaces, so
+  each provider carries a measured min_answer_score (0.05 lexical, 0.38
+  fastembed) and off domain refusal holds in both.
 
 - H1 done 2026-08-11: README with screenshots, diagram, capability map;
   ARCHITECTURE, AI_ARCHITECTURE, WORKFLOWS, API, DATABASE,

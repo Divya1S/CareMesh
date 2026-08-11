@@ -706,7 +706,7 @@ class SqlChunkRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
-    async def add(self, chunk: DocumentChunk, embedding: list[float]) -> None:
+    async def add(self, chunk: DocumentChunk, embedding: list[float], provider: str) -> None:
         self._session.add(
             DocumentChunkRow(
                 id=chunk.id,
@@ -715,20 +715,38 @@ class SqlChunkRepository:
                 chunk_index=chunk.chunk_index,
                 content=chunk.content,
                 embedding=embedding,
+                embedding_provider=provider,
                 created_at=chunk.created_at,
             )
         )
 
+    async def update_embeddings(
+        self, chunk_ids: list[UUID], embeddings: list[list[float]], provider: str
+    ) -> None:
+        for chunk_id, embedding in zip(chunk_ids, embeddings, strict=True):
+            await self._session.execute(
+                update(DocumentChunkRow)
+                .where(DocumentChunkRow.id == chunk_id)
+                .values(embedding=embedding, embedding_provider=provider)
+            )
+
+    async def all_for_reingest(self) -> list[DocumentChunkRow]:
+        rows = await self._session.scalars(select(DocumentChunkRow))
+        return list(rows)
+
     async def search(
-        self, organization_id: UUID, embedding: list[float], k: int
+        self, organization_id: UUID, embedding: list[float], k: int, provider: str
     ) -> list[RetrievedChunk]:
-        """Cosine similarity search over ready documents in one tenant."""
+        """Cosine similarity search over ready documents in one tenant.
+        Filtered to the querying provider's vectors: mixing embedding
+        spaces produces garbage similarities."""
         distance = DocumentChunkRow.embedding.cosine_distance(embedding)
         rows = await self._session.execute(
             select(DocumentChunkRow, DocumentRow, distance.label("distance"))
             .join(DocumentRow, DocumentChunkRow.document_id == DocumentRow.id)
             .where(
                 DocumentChunkRow.organization_id == organization_id,
+                DocumentChunkRow.embedding_provider == provider,
                 DocumentRow.status == DocumentStatus.READY,
             )
             .order_by(distance.asc())
