@@ -14,7 +14,8 @@ Honesty rules that must never be broken (repeated here because they carry weight
 
 ## Current state
 
-- **Phase:** RAG (spec P6) complete (gate passed 2026-08-10), after the vertical slice S1 to S7. Next broadening candidates: school and guardian surfaces (P9), payer (P10), observability stack, eval expansion, security hardening
+- **Phase:** school and guardian surfaces (spec P9) complete (gate passed 2026-08-10), after the slice and RAG. Next broadening candidates: payer (P10), observability stack, eval expansion, security hardening
+- **P9:** school staff see a names only roster and submit referrals (real workflow: submitted, accepted, declined); accepting assigns the therapist and notifies linked guardians. Guardians see only explicitly shared items (guardian_links gates everything): care updates written for them, notifications, resources. Surfaces at `/school` and `/guardian`; demo accounts school@ and guardian@demo.caremesh.org
 - **RAG:** real pipeline (ADR 0006): versioned documents chunked and embedded (local lexical hashing, EMBEDDING_PROVIDER env var) into pgvector, tenant scoped cosine search plus keyword rerank, grounded answers with citations through the `knowledge_answer` prompt, retrieval trail in `rag_retrievals`. API under `/api/v1/knowledge`; student surface at `/resources`; ingestion is ops_admin only
 - **Ops console:** `/ops` (ops_admin): workflows with transition history, AI request inspector, event outbox with safe republish (idempotent consumers), DLQ viewer. Evals: `backend/evals/` golden dataset runs in verify.sh; E2E journey: `./scripts/e2e.sh`
 - **Risk flow:** the conversation consumer runs the Risk Signal agent (gateway, `risk_signal` v1) on patient messages; deterministic thresholds in `domain/risk.py` open a Risk Escalation workflow; therapists review at `/clinician` with accept, edit, or reject; everything is evented and the workflow history is append only

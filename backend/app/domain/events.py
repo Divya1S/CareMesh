@@ -29,7 +29,90 @@ class DomainEvent:
 
 PATIENT_MESSAGE_CREATED = "PatientMessageCreated"
 AI_RESPONSE_GENERATED = "AIResponseGenerated"
+REFERRAL_SUBMITTED = "ReferralSubmitted"
+REFERRAL_DECIDED = "ReferralDecided"
+GUARDIAN_NOTIFICATION_REQUIRED = "GuardianNotificationRequired"
 RISK_SIGNAL_DETECTED = "RiskSignalDetected"
+
+
+def referral_submitted(
+    *,
+    referral_id: UUID,
+    workflow_id: UUID,
+    patient_id: UUID,
+    submitted_by: UUID,
+    organization_id: UUID,
+    occurred_at: datetime,
+    correlation_id: str | None,
+) -> DomainEvent:
+    # Ids only; the concern text stays in the database.
+    return DomainEvent(
+        event_type=REFERRAL_SUBMITTED,
+        schema_version=1,
+        occurred_at=occurred_at,
+        organization_id=organization_id,
+        correlation_id=correlation_id,
+        payload={
+            "referral_id": str(referral_id),
+            "workflow_id": str(workflow_id),
+            "patient_id": str(patient_id),
+            "submitted_by": str(submitted_by),
+        },
+    )
+
+
+def referral_decided(
+    *,
+    referral_id: UUID,
+    workflow_id: UUID,
+    patient_id: UUID,
+    decided_by: UUID,
+    decision: str,
+    organization_id: UUID,
+    occurred_at: datetime,
+    correlation_id: str | None,
+) -> DomainEvent:
+    return DomainEvent(
+        event_type=REFERRAL_DECIDED,
+        schema_version=1,
+        occurred_at=occurred_at,
+        organization_id=organization_id,
+        correlation_id=correlation_id,
+        payload={
+            "referral_id": str(referral_id),
+            "workflow_id": str(workflow_id),
+            "patient_id": str(patient_id),
+            "decided_by": str(decided_by),
+            "decision": decision,
+        },
+    )
+
+
+def guardian_notification_required(
+    *,
+    notification_id: UUID,
+    guardian_id: UUID,
+    patient_id: UUID,
+    kind: str,
+    organization_id: UUID,
+    occurred_at: datetime,
+    correlation_id: str | None,
+) -> DomainEvent:
+    return DomainEvent(
+        event_type=GUARDIAN_NOTIFICATION_REQUIRED,
+        schema_version=1,
+        occurred_at=occurred_at,
+        organization_id=organization_id,
+        correlation_id=correlation_id,
+        payload={
+            "notification_id": str(notification_id),
+            "guardian_id": str(guardian_id),
+            "patient_id": str(patient_id),
+            "kind": kind,
+        },
+    )
+
+
 RISK_REVIEW_REQUIRED = "RiskReviewRequired"
 HUMAN_REVIEW_COMPLETED = "HumanReviewCompleted"
 

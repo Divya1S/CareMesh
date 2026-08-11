@@ -13,6 +13,7 @@ from app.domain.entities import (
     Conversation,
     Message,
     Organization,
+    Role,
     User,
 )
 from app.domain.events import DomainEvent
@@ -28,9 +29,13 @@ from app.infrastructure.models import (
     DocumentChunkRow,
     DocumentRow,
     DomainEventLogRow,
+    GuardianLinkRow,
+    GuardianNotificationRow,
+    GuardianUpdateRow,
     MessageRow,
     OrganizationRow,
     RagRetrievalRow,
+    ReferralRow,
     RiskReviewRow,
     RiskSignalRow,
     UserRow,
@@ -100,6 +105,19 @@ class SqlUserRepository:
                 created_at=user.created_at,
             )
         )
+
+    async def list_patients(self, organization_id: UUID) -> list[tuple[UUID, str]]:
+        """Roster shape: ids and display names only, nothing clinical."""
+        rows = await self._session.execute(
+            select(UserRow.id, UserRow.display_name)
+            .where(
+                UserRow.organization_id == organization_id,
+                UserRow.role == Role.PATIENT,
+                UserRow.is_active.is_(True),
+            )
+            .order_by(UserRow.display_name.asc())
+        )
+        return [(user_id, name) for user_id, name in rows]
 
 
 class SqlOrganizationRepository:
@@ -710,6 +728,167 @@ class SqlRagRetrievalRepository:
                 created_at=created_at,
             )
         )
+
+
+class SqlReferralRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def add(
+        self,
+        *,
+        referral_id: UUID,
+        organization_id: UUID,
+        patient_id: UUID,
+        submitted_by: UUID,
+        workflow_id: UUID,
+        concern: str,
+        consent_confirmed: bool,
+        created_at: datetime,
+    ) -> None:
+        # The workflow row is pending in this session; flush it first so the
+        # workflow_id foreign key resolves (see gotchas).
+        await self._session.flush()
+        self._session.add(
+            ReferralRow(
+                id=referral_id,
+                organization_id=organization_id,
+                patient_id=patient_id,
+                submitted_by=submitted_by,
+                workflow_id=workflow_id,
+                concern=concern,
+                consent_confirmed=consent_confirmed,
+                created_at=created_at,
+            )
+        )
+
+    async def get_by_id(self, referral_id: UUID) -> ReferralRow | None:
+        return await self._session.get(ReferralRow, referral_id)
+
+    async def list_joined(
+        self,
+        organization_id: UUID,
+        *,
+        submitted_by: UUID | None = None,
+        state: str | None = None,
+    ) -> list[tuple[ReferralRow, str, str]]:
+        """Referrals with workflow state and patient display name."""
+        query = (
+            select(ReferralRow, WorkflowInstanceRow.state, UserRow.display_name)
+            .join(WorkflowInstanceRow, ReferralRow.workflow_id == WorkflowInstanceRow.id)
+            .join(UserRow, ReferralRow.patient_id == UserRow.id)
+            .where(ReferralRow.organization_id == organization_id)
+            .order_by(ReferralRow.created_at.desc())
+        )
+        if submitted_by is not None:
+            query = query.where(ReferralRow.submitted_by == submitted_by)
+        if state is not None:
+            query = query.where(WorkflowInstanceRow.state == state)
+        rows = await self._session.execute(query)
+        return [(r, s, name) for r, s, name in rows]
+
+
+class SqlGuardianRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def links_for_guardian(self, guardian_id: UUID) -> list[tuple[UUID, str]]:
+        rows = await self._session.execute(
+            select(GuardianLinkRow.patient_id, UserRow.display_name)
+            .join(UserRow, GuardianLinkRow.patient_id == UserRow.id)
+            .where(GuardianLinkRow.guardian_id == guardian_id)
+        )
+        return [(patient_id, name) for patient_id, name in rows]
+
+    async def guardians_for_patient(self, patient_id: UUID) -> list[UUID]:
+        rows = await self._session.scalars(
+            select(GuardianLinkRow.guardian_id).where(GuardianLinkRow.patient_id == patient_id)
+        )
+        return list(rows)
+
+    async def add_link(
+        self, *, organization_id: UUID, guardian_id: UUID, patient_id: UUID, now: datetime
+    ) -> None:
+        self._session.add(
+            GuardianLinkRow(
+                id=uuid7(),
+                organization_id=organization_id,
+                guardian_id=guardian_id,
+                patient_id=patient_id,
+                created_at=now,
+            )
+        )
+
+    async def add_update(
+        self,
+        *,
+        organization_id: UUID,
+        patient_id: UUID,
+        author_id: UUID,
+        content: str,
+        now: datetime,
+    ) -> UUID:
+        update_id = uuid7()
+        self._session.add(
+            GuardianUpdateRow(
+                id=update_id,
+                organization_id=organization_id,
+                patient_id=patient_id,
+                author_id=author_id,
+                content=content,
+                created_at=now,
+            )
+        )
+        return update_id
+
+    async def updates_for_patients(
+        self, patient_ids: list[UUID]
+    ) -> list[tuple[GuardianUpdateRow, str, str]]:
+        """Updates with author and patient display names."""
+        author = UserRow.__table__.alias("author")
+        patient = UserRow.__table__.alias("patient")
+        rows = await self._session.execute(
+            select(GuardianUpdateRow, author.c.display_name, patient.c.display_name)
+            .join(author, GuardianUpdateRow.author_id == author.c.id)
+            .join(patient, GuardianUpdateRow.patient_id == patient.c.id)
+            .where(GuardianUpdateRow.patient_id.in_(patient_ids))
+            .order_by(GuardianUpdateRow.created_at.desc())
+            .limit(50)
+        )
+        return [(u, a, p) for u, a, p in rows]
+
+    async def add_notification(
+        self,
+        *,
+        organization_id: UUID,
+        guardian_id: UUID,
+        patient_id: UUID,
+        kind: str,
+        content: str,
+        now: datetime,
+    ) -> UUID:
+        notification_id = uuid7()
+        self._session.add(
+            GuardianNotificationRow(
+                id=notification_id,
+                organization_id=organization_id,
+                guardian_id=guardian_id,
+                patient_id=patient_id,
+                kind=kind,
+                content=content,
+                created_at=now,
+            )
+        )
+        return notification_id
+
+    async def notifications_for_guardian(self, guardian_id: UUID) -> list[GuardianNotificationRow]:
+        rows = await self._session.scalars(
+            select(GuardianNotificationRow)
+            .where(GuardianNotificationRow.guardian_id == guardian_id)
+            .order_by(GuardianNotificationRow.created_at.desc())
+            .limit(50)
+        )
+        return list(rows)
 
 
 class SqlCareAssignmentRepository:

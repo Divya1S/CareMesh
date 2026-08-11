@@ -11,8 +11,10 @@ from app.application.ai.gateway import AIGateway
 from app.application.errors import UnauthorizedError
 from app.application.use_cases.auth import AuthService
 from app.application.use_cases.conversations import ConversationService
+from app.application.use_cases.guardians import GuardianService
 from app.application.use_cases.knowledge import KnowledgeService
 from app.application.use_cases.ops import OpsService
+from app.application.use_cases.referrals import ReferralService
 from app.application.use_cases.reviews import ReviewService
 from app.domain.entities import User
 from app.infrastructure.ai.embeddings import create_embedding_provider
@@ -27,8 +29,10 @@ from app.infrastructure.repositories import (
     SqlDocumentRepository,
     SqlEventLogQuery,
     SqlEventOutbox,
+    SqlGuardianRepository,
     SqlMessageRepository,
     SqlRagRetrievalRepository,
+    SqlReferralRepository,
     SqlRiskRepository,
     SqlUserRepository,
     SqlWorkflowRepository,
@@ -143,6 +147,32 @@ def get_knowledge_service(
 
 
 KnowledgeServiceDep = Annotated[KnowledgeService, Depends(get_knowledge_service)]
+
+
+def get_referral_service(session: SessionDep) -> ReferralService:
+    return ReferralService(
+        referrals=SqlReferralRepository(session),
+        workflows=SqlWorkflowRepository(session),
+        users=SqlUserRepository(session),
+        assignments=SqlCareAssignmentRepository(session),
+        guardians=SqlGuardianRepository(session),
+        outbox=SqlEventOutbox(session),
+    )
+
+
+ReferralServiceDep = Annotated[ReferralService, Depends(get_referral_service)]
+
+
+def get_guardian_service(session: SessionDep) -> GuardianService:
+    return GuardianService(
+        guardians=SqlGuardianRepository(session),
+        assignments=SqlCareAssignmentRepository(session),
+        users=SqlUserRepository(session),
+        outbox=SqlEventOutbox(session),
+    )
+
+
+GuardianServiceDep = Annotated[GuardianService, Depends(get_guardian_service)]
 
 
 async def get_current_user(request: Request, session: SessionDep, tokens: TokenServiceDep) -> User:

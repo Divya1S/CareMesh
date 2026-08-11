@@ -20,6 +20,9 @@ export type OpsEvent = components["schemas"]["OpsEventResponse"];
 export type OpsDlq = components["schemas"]["OpsDlqResponse"];
 export type KnowledgeDocument = components["schemas"]["KnowledgeDocumentResponse"];
 export type KnowledgeAnswer = components["schemas"]["AskResponse"];
+export type RosterEntry = components["schemas"]["RosterEntryResponse"];
+export type Referral = components["schemas"]["ReferralResponse"];
+export type GuardianOverview = components["schemas"]["GuardianOverviewResponse"];
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -128,6 +131,44 @@ export const opsViewDlq = () => request<OpsDlq>("/api/v1/ops/dlq");
 
 export const listKnowledgeDocuments = () =>
   request<KnowledgeDocument[]>("/api/v1/knowledge/documents");
+
+export const schoolRoster = () => request<RosterEntry[]>("/api/v1/school/roster");
+
+export const schoolReferrals = () => request<Referral[]>("/api/v1/school/referrals");
+
+export const submitReferral = (patientId: string, concern: string, consent: boolean) =>
+  request<Referral>("/api/v1/school/referrals", {
+    method: "POST",
+    body: JSON.stringify({
+      patient_id: patientId,
+      concern,
+      consent_confirmed: consent,
+    }),
+  });
+
+export const pendingReferrals = () => request<Referral[]>("/api/v1/referrals");
+
+export const decideReferral = (referralId: string, accept: boolean) =>
+  request<{ referral_id: string; state: string }>(
+    `/api/v1/referrals/${referralId}/decision`,
+    { method: "POST", body: JSON.stringify({ accept }) },
+  );
+
+export const guardianOverview = () =>
+  request<GuardianOverview>("/api/v1/guardian/overview");
+
+export const myPatients = () =>
+  request<{ patient_id: string; name: string }[]>("/api/v1/my-patients");
+
+export const shareGuardianUpdate = async (
+  patientId: string,
+  content: string,
+): Promise<void> => {
+  await request<unknown>("/api/v1/guardian/updates", {
+    method: "POST",
+    body: JSON.stringify({ patient_id: patientId, content }),
+  });
+};
 
 export const askKnowledge = (question: string) =>
   request<KnowledgeAnswer>("/api/v1/knowledge/ask", {

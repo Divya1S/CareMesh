@@ -20,6 +20,7 @@ from app.infrastructure.repositories import (
     SqlCareAssignmentRepository,
     SqlChunkRepository,
     SqlDocumentRepository,
+    SqlGuardianRepository,
     SqlOrganizationRepository,
     SqlRagRetrievalRepository,
     SqlUserRepository,
@@ -34,6 +35,8 @@ USERS = [
     ("student@demo.caremesh.org", Role.PATIENT, "Sam Student"),
     ("therapist@demo.caremesh.org", Role.THERAPIST, "Dr. Rivera"),
     ("ops@demo.caremesh.org", Role.OPS_ADMIN, "Olly Ops"),
+    ("guardian@demo.caremesh.org", Role.GUARDIAN, "Gale Guardian"),
+    ("school@demo.caremesh.org", Role.SCHOOL_STAFF, "Sky Counselor"),
 ]
 
 # Fictional resource documents for the knowledge library. Plain wellbeing
@@ -144,6 +147,15 @@ async def seed() -> None:
                 log.info("seed_ingested_document", source=source_name, chunks=chunk_count)
 
         therapist, patient = created[Role.THERAPIST], created[Role.PATIENT]
+        guardians = SqlGuardianRepository(session)
+        if not await guardians.guardians_for_patient(patient.id):
+            await guardians.add_link(
+                organization_id=org.id,
+                guardian_id=created[Role.GUARDIAN].id,
+                patient_id=patient.id,
+                now=now,
+            )
+            log.info("seed_created_guardian_link")
         if not await assignments.is_assigned(therapist.id, patient.id):
             await assignments.add(
                 CareAssignment(

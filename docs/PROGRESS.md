@@ -5,13 +5,13 @@
 
 ## Current phase
 
-**RAG (spec P6): COMPLETE. Gate passed on 2026-08-10** (83 backend tests,
-13 frontend tests, 7/7 evals). The vertical slice S1 to S7 was completed
-earlier the same day.
+**School and guardian surfaces (spec P9): COMPLETE. Gate passed on
+2026-08-10** (89 backend tests, 13 frontend tests, 7/7 evals). Earlier the
+same day: the vertical slice S1 to S7, then RAG (P6).
 
-Next broadening candidates, pick with the human: school and guardian
-surfaces (P9), payer workflows (P10), the observability compose profile,
-eval expansion (add retrieval quality cases), security hardening.
+Next broadening candidates, pick with the human: payer workflows (P10),
+the observability compose profile, eval expansion (retrieval quality
+cases), security hardening.
 Phase 0 was approved by the human on 2026-08-10 and the approved plan is
 `docs/PHASE_0_PROPOSAL.md` (roadmap in section 11). All frontend work follows
 `docs/DESIGN.md` (added by the human; authoritative).
@@ -201,9 +201,33 @@ Phase 0 was approved by the human on 2026-08-10 and the approved plan is
     the sources row (cited vs retrieved but not cited), library list.
     Resources is now a live link in the chat rail.
 
+- 2026-08-10, school and guardian surfaces (P9), validated by
+  `./scripts/verify.sh` and a browser walk of the full loop (school stepper
+  submit, therapist accept plus share update, guardian portal shows the
+  notification and the update; zero console errors, screenshots reviewed):
+  - Referral workflow (states submitted, accepted, declined; enum value
+    added by migration `840af87195a6`, tables by `6245b76ab2c3`). School
+    staff see a names only roster and their own referrals' states, nothing
+    clinical (tested). Consent confirmation is required to submit.
+    Accepting a referral assigns the deciding therapist to the patient and
+    notifies linked guardians. Terminal workflows refuse a second decision.
+  - Guardian portal: `guardian_links` gates everything. Guardians see care
+    updates deliberately written for them by assigned therapists,
+    notifications (referral accepted, care update), and the resource
+    library; conversations, reviews, and ops all return 403 (tested).
+  - Events `ReferralSubmitted`, `ReferralDecided`, and the spec's
+    `GuardianNotificationRequired` documented in docs/EVENTS.md; payloads
+    carry ids only.
+  - Surfaces: `/school` (thread stepper per DESIGN.md 4.5, status chips
+    mirror workflow state names exactly), `/guardian` (calm card grid per
+    4.3, empty states as invitations), clinician workspace gains a
+    referrals queue and a share update form. Login routes each role to its
+    home surface. Seed adds school@ and guardian@demo.caremesh.org and the
+    guardian link to Sam.
+
 ## In flight
 
-- Nothing. The RAG phase closed cleanly, working tree committed.
+- Nothing. P9 closed cleanly, working tree committed.
 
 ## Known limitations (intentional, coming in later phases)
 

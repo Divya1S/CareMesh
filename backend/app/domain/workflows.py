@@ -9,6 +9,7 @@ from uuid import UUID
 
 class WorkflowType(StrEnum):
     RISK_ESCALATION = "risk_escalation"
+    REFERRAL = "referral"
 
 
 class RiskEscalationState(StrEnum):
@@ -17,14 +18,27 @@ class RiskEscalationState(StrEnum):
     FAILED = "failed"
 
 
+class ReferralState(StrEnum):
+    SUBMITTED = "submitted"
+    ACCEPTED = "accepted"
+    DECLINED = "declined"
+
+
 # Allowed transitions per workflow type. A transition not listed here is a
 # bug, and attempting it raises instead of silently corrupting state.
-RISK_ESCALATION_TRANSITIONS: dict[str, frozenset[str]] = {
-    RiskEscalationState.PENDING_REVIEW: frozenset(
-        {RiskEscalationState.RESOLVED, RiskEscalationState.FAILED}
-    ),
-    RiskEscalationState.RESOLVED: frozenset(),
-    RiskEscalationState.FAILED: frozenset(),
+TRANSITIONS_BY_TYPE: dict[WorkflowType, dict[str, frozenset[str]]] = {
+    WorkflowType.RISK_ESCALATION: {
+        RiskEscalationState.PENDING_REVIEW: frozenset(
+            {RiskEscalationState.RESOLVED, RiskEscalationState.FAILED}
+        ),
+        RiskEscalationState.RESOLVED: frozenset(),
+        RiskEscalationState.FAILED: frozenset(),
+    },
+    WorkflowType.REFERRAL: {
+        ReferralState.SUBMITTED: frozenset({ReferralState.ACCEPTED, ReferralState.DECLINED}),
+        ReferralState.ACCEPTED: frozenset(),
+        ReferralState.DECLINED: frozenset(),
+    },
 }
 
 
@@ -33,9 +47,10 @@ class InvalidTransitionError(Exception):
 
 
 def validate_transition(workflow_type: WorkflowType, from_state: str, to_state: str) -> None:
-    if workflow_type is not WorkflowType.RISK_ESCALATION:
+    transitions = TRANSITIONS_BY_TYPE.get(workflow_type)
+    if transitions is None:
         raise InvalidTransitionError(f"Unknown workflow type: {workflow_type}")
-    allowed = RISK_ESCALATION_TRANSITIONS.get(from_state, frozenset())
+    allowed = transitions.get(from_state, frozenset())
     if to_state not in allowed:
         raise InvalidTransitionError(f"{workflow_type}: cannot go from {from_state} to {to_state}")
 

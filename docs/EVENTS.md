@@ -93,3 +93,37 @@ This file documents reality only; events land here when they ship.
 - **Payload:** `workflow_id`, `risk_signal_id`, `reviewer_id`, `decision`,
   `severity_override`.
 - **Consumers:** none yet (evaluation phase).
+
+### ReferralSubmitted, v1
+
+- **Purpose:** a school staff member referred a student to the care team; a
+  referral workflow opened in `submitted`.
+- **Producer:** `ReferralService.submit` (outbox, same transaction as the
+  referral row and workflow).
+- **Topic:** `caremesh.referral.referral_submitted`
+- **Payload:** `referral_id`, `workflow_id`, `patient_id`, `submitted_by`.
+  The concern text stays in the database.
+- **Consumers:** none yet (notification phases).
+
+### ReferralDecided, v1
+
+- **Purpose:** a therapist accepted or declined a referral; the workflow is
+  terminal. Acceptance also creates a care assignment.
+- **Producer:** `ReferralService.decide`, same transaction as the workflow
+  transition.
+- **Topic:** `caremesh.referral.referral_decided`
+- **Payload:** `referral_id`, `workflow_id`, `patient_id`, `decided_by`,
+  `decision` (accepted | declined).
+- **Consumers:** none yet.
+
+### GuardianNotificationRequired, v1
+
+- **Purpose:** something happened that a linked guardian should hear about
+  (referral accepted, care update shared). The notification row is the
+  source of truth; this event feeds delivery channels later.
+- **Producer:** `ReferralService._notify_guardians` and
+  `GuardianService.share_update`, same transaction as the notification row.
+- **Topic:** `caremesh.guardian.guardian_notification_required`
+- **Payload:** `notification_id`, `guardian_id`, `patient_id`, `kind`
+  (referral_accepted | care_update). Content stays in the database.
+- **Consumers:** none yet (email or push delivery would subscribe here).

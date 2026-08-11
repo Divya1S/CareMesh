@@ -76,6 +76,44 @@ class ReviewDecisionResponse(BaseModel):
     decision: ReviewDecision
 
 
+class RosterEntryResponse(BaseModel):
+    patient_id: UUID
+    name: str
+
+
+class ReferralSubmitRequest(BaseModel):
+    patient_id: UUID
+    concern: str = Field(min_length=10, max_length=4000)
+    consent_confirmed: bool
+
+
+class ReferralResponse(BaseModel):
+    referral_id: UUID
+    workflow_id: UUID
+    patient_id: UUID
+    patient_name: str
+    # Mirrors the workflow state machine names exactly: submitted,
+    # accepted, declined.
+    state: str
+    created_at: datetime
+    concern: str | None
+
+
+class ReferralDecideRequest(BaseModel):
+    accept: bool
+
+
+class GuardianOverviewResponse(BaseModel):
+    students: list[dict]
+    updates: list[dict]
+    notifications: list[dict]
+
+
+class GuardianUpdateRequest(BaseModel):
+    patient_id: UUID
+    content: str = Field(min_length=5, max_length=4000)
+
+
 class KnowledgeDocumentResponse(BaseModel):
     id: UUID
     title: str

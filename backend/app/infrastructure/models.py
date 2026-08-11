@@ -286,6 +286,67 @@ class RagRetrievalRow(Base):
     created_at: Mapped[datetime] = _created_at()
 
 
+class ReferralRow(Base):
+    """A school referral. Workflow state lives in workflow_instances; this
+    row holds the content. The concern text never leaves the database."""
+
+    __tablename__ = "referrals"
+    __table_args__ = (Index("ix_referrals_org_created", "organization_id", "created_at"),)
+
+    id: Mapped[UUID] = _uuid_pk()
+    organization_id: Mapped[UUID] = mapped_column(ForeignKey("organizations.id"), nullable=False)
+    patient_id: Mapped[UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    submitted_by: Mapped[UUID] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    workflow_id: Mapped[UUID] = mapped_column(
+        ForeignKey("workflow_instances.id"), nullable=False, unique=True
+    )
+    concern: Mapped[str] = mapped_column(Text, nullable=False)
+    consent_confirmed: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    created_at: Mapped[datetime] = _created_at()
+
+
+class GuardianLinkRow(Base):
+    """Explicit authorization: a guardian sees a patient's shared items only
+    when this link exists. Least privilege by construction."""
+
+    __tablename__ = "guardian_links"
+    __table_args__ = (UniqueConstraint("guardian_id", "patient_id", name="uq_guardian_patient"),)
+
+    id: Mapped[UUID] = _uuid_pk()
+    organization_id: Mapped[UUID] = mapped_column(ForeignKey("organizations.id"), nullable=False)
+    guardian_id: Mapped[UUID] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    patient_id: Mapped[UUID] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    created_at: Mapped[datetime] = _created_at()
+
+
+class GuardianUpdateRow(Base):
+    """A care team authored update, deliberately written for guardians.
+    Guardians never see conversations or signals; only these."""
+
+    __tablename__ = "guardian_updates"
+    __table_args__ = (Index("ix_guardian_updates_patient", "patient_id", "created_at"),)
+
+    id: Mapped[UUID] = _uuid_pk()
+    organization_id: Mapped[UUID] = mapped_column(ForeignKey("organizations.id"), nullable=False)
+    patient_id: Mapped[UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    author_id: Mapped[UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = _created_at()
+
+
+class GuardianNotificationRow(Base):
+    __tablename__ = "guardian_notifications"
+    __table_args__ = (Index("ix_guardian_notifications_guardian", "guardian_id", "created_at"),)
+
+    id: Mapped[UUID] = _uuid_pk()
+    organization_id: Mapped[UUID] = mapped_column(ForeignKey("organizations.id"), nullable=False)
+    guardian_id: Mapped[UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    patient_id: Mapped[UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    kind: Mapped[str] = mapped_column(String(50), nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = _created_at()
+
+
 class CareAssignmentRow(Base):
     __tablename__ = "care_assignments"
     __table_args__ = (

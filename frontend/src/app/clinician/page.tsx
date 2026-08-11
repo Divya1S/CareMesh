@@ -8,12 +8,17 @@ import { Chip } from "@/components/ui/Chip";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { SeverityLabel } from "@/components/ui/SeverityLabel";
 import {
+  decideReferral,
   decideReview,
   getMe,
   listReviews,
+  pendingReferrals,
+  shareGuardianUpdate,
   type Me,
+  type Referral,
   type ReviewDecision,
   type ReviewItem,
+  myPatients,
 } from "@/lib/api";
 import { clearTokens, isLoggedIn } from "@/lib/auth";
 
@@ -23,6 +28,11 @@ export default function ClinicianPage() {
   const router = useRouter();
   const [me, setMe] = useState<Me | null>(null);
   const [items, setItems] = useState<ReviewItem[]>([]);
+  const [referrals, setReferrals] = useState<Referral[]>([]);
+  const [patients, setPatients] = useState<{ patient_id: string; name: string }[]>([]);
+  const [updatePatient, setUpdatePatient] = useState("");
+  const [updateText, setUpdateText] = useState("");
+  const [updateSent, setUpdateSent] = useState(false);
   const [decided, setDecided] = useState<Record<string, Decided>>({});
   const [editing, setEditing] = useState<string | null>(null);
   const [severityOverride, setSeverityOverride] = useState(1);
@@ -31,7 +41,14 @@ export default function ClinicianPage() {
   const [loaded, setLoaded] = useState(false);
 
   const refresh = useCallback(async () => {
-    setItems(await listReviews());
+    const [reviews, pending, assigned] = await Promise.all([
+      listReviews(),
+      pendingReferrals(),
+      myPatients(),
+    ]);
+    setItems(reviews);
+    setReferrals(pending);
+    setPatients(assigned);
     setDecided({});
     setEditing(null);
   }, []);
@@ -49,7 +66,7 @@ export default function ClinicianPage() {
           return;
         }
         setMe(profile);
-        setItems(await listReviews());
+        await refresh();
       } catch {
         clearTokens();
         router.replace("/login");
@@ -57,7 +74,20 @@ export default function ClinicianPage() {
         setLoaded(true);
       }
     })();
-  }, [router]);
+  }, [router, refresh]);
+
+  async function onReferral(referral: Referral, accept: boolean) {
+    await decideReferral(referral.referral_id, accept);
+    await refresh();
+  }
+
+  async function onShareUpdate(event: React.FormEvent) {
+    event.preventDefault();
+    if (!updatePatient || updateText.trim().length < 5) return;
+    await shareGuardianUpdate(updatePatient, updateText.trim());
+    setUpdateText("");
+    setUpdateSent(true);
+  }
 
   async function decide(item: ReviewItem, decision: ReviewDecision) {
     setBusy(item.workflow_id);
@@ -230,6 +260,90 @@ export default function ClinicianPage() {
           ) : null}
         </div>
       )}
+
+      <section className="mt-10">
+        <h2 className="mb-2 font-semibold text-ink">School referrals</h2>
+        {referrals.length === 0 ? (
+          <p className="text-[0.875rem] text-ink-soft">
+            No referrals waiting. School submissions appear here.
+          </p>
+        ) : (
+          <div className="flex flex-col gap-3">
+            {referrals.map((r) => (
+              <div
+                key={r.referral_id}
+                className="rounded-card border border-line bg-card p-4 shadow-soft"
+              >
+                <div className="mb-1 flex items-center gap-2">
+                  <Chip tone="warn">{r.state}</Chip>
+                  <span className="font-medium text-ink">{r.patient_name}</span>
+                  <span className="ml-auto text-[0.75rem] text-ink-soft">
+                    {new Date(r.created_at).toLocaleDateString()}
+                  </span>
+                </div>
+                <p className="text-[0.9375rem] text-ink">{r.concern}</p>
+                <div className="mt-3 flex gap-2">
+                  <Button onClick={() => onReferral(r, true)}>
+                    Accept and take on
+                  </Button>
+                  <Button variant="ghost" onClick={() => onReferral(r, false)}>
+                    Decline
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section className="mt-10">
+        <h2 className="mb-2 font-semibold text-ink">Share an update with a guardian</h2>
+        <form
+          onSubmit={onShareUpdate}
+          className="rounded-card border border-line bg-card p-4 shadow-soft"
+        >
+          <div className="flex flex-wrap items-end gap-3">
+            <label className="text-[0.8125rem] text-ink">
+              Patient
+              <select
+                value={updatePatient}
+                onChange={(e) => setUpdatePatient(e.target.value)}
+                className="mt-1 block min-h-11 rounded-control border border-line bg-card px-2"
+              >
+                <option value="">Choose…</option>
+                {patients.map((p) => (
+                  <option key={p.patient_id} value={p.patient_id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex-1 text-[0.8125rem] text-ink">
+              Update, written for the guardian
+              <input
+                value={updateText}
+                onChange={(e) => {
+                  setUpdateText(e.target.value);
+                  setUpdateSent(false);
+                }}
+                placeholder="What should the guardian know?"
+                className="mt-1 block min-h-11 w-full rounded-control border border-line bg-card px-3"
+              />
+            </label>
+            <Button
+              type="submit"
+              disabled={!updatePatient || updateText.trim().length < 5}
+            >
+              Share update
+            </Button>
+          </div>
+          {updateSent ? (
+            <p className="mt-2 text-[0.8125rem] text-ok">
+              Update shared. Linked guardians were notified.
+            </p>
+          ) : null}
+        </form>
+      </section>
     </main>
   );
 }

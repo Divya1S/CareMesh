@@ -55,4 +55,7 @@ _DOMAIN_BY_EVENT = {
     "RiskSignalDetected": "risk",
     "RiskReviewRequired": "risk",
     "HumanReviewCompleted": "risk",
+    "ReferralSubmitted": "referral",
+    "ReferralDecided": "referral",
+    "GuardianNotificationRequired": "guardian",
 }
