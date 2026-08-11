@@ -32,7 +32,61 @@ AI_RESPONSE_GENERATED = "AIResponseGenerated"
 REFERRAL_SUBMITTED = "ReferralSubmitted"
 REFERRAL_DECIDED = "ReferralDecided"
 GUARDIAN_NOTIFICATION_REQUIRED = "GuardianNotificationRequired"
+INSURANCE_CLAIM_SUBMITTED = "InsuranceClaimSubmitted"
+INSURANCE_CLAIM_UPDATED = "InsuranceClaimUpdated"
 RISK_SIGNAL_DETECTED = "RiskSignalDetected"
+
+
+def insurance_claim_submitted(
+    *,
+    claim_id: UUID,
+    workflow_id: UUID,
+    patient_id: UUID,
+    submitted_by: UUID,
+    amount_cents: int,
+    organization_id: UUID,
+    occurred_at: datetime,
+    correlation_id: str | None,
+) -> DomainEvent:
+    return DomainEvent(
+        event_type=INSURANCE_CLAIM_SUBMITTED,
+        schema_version=1,
+        occurred_at=occurred_at,
+        organization_id=organization_id,
+        correlation_id=correlation_id,
+        payload={
+            "claim_id": str(claim_id),
+            "workflow_id": str(workflow_id),
+            "patient_id": str(patient_id),
+            "submitted_by": str(submitted_by),
+            "amount_cents": amount_cents,
+        },
+    )
+
+
+def insurance_claim_updated(
+    *,
+    claim_id: UUID,
+    workflow_id: UUID,
+    state: str,
+    actor_id: UUID,
+    organization_id: UUID,
+    occurred_at: datetime,
+    correlation_id: str | None,
+) -> DomainEvent:
+    return DomainEvent(
+        event_type=INSURANCE_CLAIM_UPDATED,
+        schema_version=1,
+        occurred_at=occurred_at,
+        organization_id=organization_id,
+        correlation_id=correlation_id,
+        payload={
+            "claim_id": str(claim_id),
+            "workflow_id": str(workflow_id),
+            "state": state,
+            "actor_id": str(actor_id),
+        },
+    )
 
 
 def referral_submitted(

@@ -58,4 +58,6 @@ _DOMAIN_BY_EVENT = {
     "ReferralSubmitted": "referral",
     "ReferralDecided": "referral",
     "GuardianNotificationRequired": "guardian",
+    "InsuranceClaimSubmitted": "billing",
+    "InsuranceClaimUpdated": "billing",
 }

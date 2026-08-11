@@ -26,6 +26,7 @@ export default function LoginPage() {
         ops_admin: "/ops",
         school_staff: "/school",
         guardian: "/guardian",
+        payer_staff: "/payer",
       };
       router.replace(home[me.role] ?? "/chat");
     } catch (err) {

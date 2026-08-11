@@ -127,3 +127,26 @@ This file documents reality only; events land here when they ship.
 - **Payload:** `notification_id`, `guardian_id`, `patient_id`, `kind`
   (referral_accepted | care_update). Content stays in the database.
 - **Consumers:** none yet (email or push delivery would subscribe here).
+
+### InsuranceClaimSubmitted, v1
+
+- **Purpose:** a therapist submitted a claim; a claim workflow opened in
+  `submitted`. Submission requires a passing eligibility check from the
+  labeled payer adapter.
+- **Producer:** `ClaimsService.submit` (outbox, same transaction as the
+  claim row and workflow).
+- **Topic:** `caremesh.billing.insurance_claim_submitted`
+- **Payload:** `claim_id`, `workflow_id`, `patient_id`, `submitted_by`,
+  `amount_cents`.
+- **Consumers:** none yet.
+
+### InsuranceClaimUpdated, v1
+
+- **Purpose:** a claim changed state: approved or denied by payer staff, or
+  resubmitted by the therapist. Denial reasons and resubmission notes live
+  on the claim row; the workflow transition history carries them too.
+- **Producer:** `ClaimsService.decide` and `ClaimsService.resubmit`, same
+  transaction as the workflow transition.
+- **Topic:** `caremesh.billing.insurance_claim_updated`
+- **Payload:** `claim_id`, `workflow_id`, `state`, `actor_id`.
+- **Consumers:** none yet.

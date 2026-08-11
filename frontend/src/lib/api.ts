@@ -21,6 +21,9 @@ export type OpsDlq = components["schemas"]["OpsDlqResponse"];
 export type KnowledgeDocument = components["schemas"]["KnowledgeDocumentResponse"];
 export type KnowledgeAnswer = components["schemas"]["AskResponse"];
 export type RosterEntry = components["schemas"]["RosterEntryResponse"];
+export type EligibilityResult = components["schemas"]["EligibilityResponse"];
+export type Claim = components["schemas"]["ClaimResponse"];
+export type ClaimTransition = components["schemas"]["OpsTransitionResponse"];
 export type Referral = components["schemas"]["ReferralResponse"];
 export type GuardianOverview = components["schemas"]["GuardianOverviewResponse"];
 
@@ -131,6 +134,45 @@ export const opsViewDlq = () => request<OpsDlq>("/api/v1/ops/dlq");
 
 export const listKnowledgeDocuments = () =>
   request<KnowledgeDocument[]>("/api/v1/knowledge/documents");
+
+export const checkEligibility = (memberId: string) =>
+  request<EligibilityResult>("/api/v1/claims/eligibility", {
+    method: "POST",
+    body: JSON.stringify({ member_id: memberId }),
+  });
+
+export const listClaims = () => request<Claim[]>("/api/v1/claims");
+
+export const submitClaim = (
+  patientId: string,
+  description: string,
+  amountCents: number,
+  eligibilityCheckId: string,
+) =>
+  request<Claim>("/api/v1/claims", {
+    method: "POST",
+    body: JSON.stringify({
+      patient_id: patientId,
+      description,
+      amount_cents: amountCents,
+      eligibility_check_id: eligibilityCheckId,
+    }),
+  });
+
+export const claimHistory = (claimId: string) =>
+  request<ClaimTransition[]>(`/api/v1/claims/${claimId}/history`);
+
+export const decideClaim = (claimId: string, approve: boolean, denialReason?: string) =>
+  request<{ claim_id: string; state: string }>(`/api/v1/claims/${claimId}/decision`, {
+    method: "POST",
+    body: JSON.stringify({ approve, denial_reason: denialReason ?? null }),
+  });
+
+export const resubmitClaim = (claimId: string, note: string) =>
+  request<{ claim_id: string; state: string }>(`/api/v1/claims/${claimId}/resubmit`, {
+    method: "POST",
+    body: JSON.stringify({ note }),
+  });
 
 export const schoolRoster = () => request<RosterEntry[]>("/api/v1/school/roster");
 

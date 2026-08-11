@@ -76,6 +76,51 @@ class ReviewDecisionResponse(BaseModel):
     decision: ReviewDecision
 
 
+class EligibilityRequest(BaseModel):
+    member_id: str = Field(min_length=3, max_length=100)
+
+
+class EligibilityResponse(BaseModel):
+    eligibility_check_id: UUID
+    eligible: bool
+    plan_name: str
+    adapter: str
+    # The external payer is a labeled simulation (fake-payer-1).
+    simulated: bool
+
+
+class ClaimSubmitRequest(BaseModel):
+    patient_id: UUID
+    description: str = Field(min_length=5, max_length=500)
+    amount_cents: int = Field(gt=0, le=10_000_00)
+    eligibility_check_id: UUID
+
+
+class ClaimResponse(BaseModel):
+    claim_id: UUID
+    workflow_id: UUID
+    patient_name: str
+    description: str
+    amount_cents: int
+    member_id: str
+    plan_name: str
+    # Mirrors the workflow state machine exactly: submitted, approved,
+    # denied, resubmitted.
+    state: str
+    denial_reason: str | None
+    resubmit_note: str | None
+    created_at: datetime
+
+
+class ClaimDecideRequest(BaseModel):
+    approve: bool
+    denial_reason: str | None = Field(default=None, max_length=500)
+
+
+class ClaimResubmitRequest(BaseModel):
+    note: str = Field(min_length=5, max_length=500)
+
+
 class RosterEntryResponse(BaseModel):
     patient_id: UUID
     name: str

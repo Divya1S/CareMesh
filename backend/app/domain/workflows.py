@@ -10,6 +10,7 @@ from uuid import UUID
 class WorkflowType(StrEnum):
     RISK_ESCALATION = "risk_escalation"
     REFERRAL = "referral"
+    CLAIM = "claim"
 
 
 class RiskEscalationState(StrEnum):
@@ -22,6 +23,13 @@ class ReferralState(StrEnum):
     SUBMITTED = "submitted"
     ACCEPTED = "accepted"
     DECLINED = "declined"
+
+
+class ClaimState(StrEnum):
+    SUBMITTED = "submitted"
+    APPROVED = "approved"
+    DENIED = "denied"
+    RESUBMITTED = "resubmitted"
 
 
 # Allowed transitions per workflow type. A transition not listed here is a
@@ -38,6 +46,12 @@ TRANSITIONS_BY_TYPE: dict[WorkflowType, dict[str, frozenset[str]]] = {
         ReferralState.SUBMITTED: frozenset({ReferralState.ACCEPTED, ReferralState.DECLINED}),
         ReferralState.ACCEPTED: frozenset(),
         ReferralState.DECLINED: frozenset(),
+    },
+    WorkflowType.CLAIM: {
+        ClaimState.SUBMITTED: frozenset({ClaimState.APPROVED, ClaimState.DENIED}),
+        ClaimState.DENIED: frozenset({ClaimState.RESUBMITTED}),
+        ClaimState.RESUBMITTED: frozenset({ClaimState.APPROVED, ClaimState.DENIED}),
+        ClaimState.APPROVED: frozenset(),
     },
 }
 

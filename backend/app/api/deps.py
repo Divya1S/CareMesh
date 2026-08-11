@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.application.ai.gateway import AIGateway
 from app.application.errors import UnauthorizedError
 from app.application.use_cases.auth import AuthService
+from app.application.use_cases.claims import ClaimsService
 from app.application.use_cases.conversations import ConversationService
 from app.application.use_cases.guardians import GuardianService
 from app.application.use_cases.knowledge import KnowledgeService
@@ -19,12 +20,14 @@ from app.application.use_cases.reviews import ReviewService
 from app.domain.entities import User
 from app.infrastructure.ai.embeddings import create_embedding_provider
 from app.infrastructure.ai.factory import create_provider
+from app.infrastructure.payer.fake_payer import FakePayerAdapter
 from app.infrastructure.repositories import (
     SqlAIRequestLog,
     SqlAIRequestQuery,
     SqlAuthSessionRepository,
     SqlCareAssignmentRepository,
     SqlChunkRepository,
+    SqlClaimRepository,
     SqlConversationRepository,
     SqlDocumentRepository,
     SqlEventLogQuery,
@@ -173,6 +176,19 @@ def get_guardian_service(session: SessionDep) -> GuardianService:
 
 
 GuardianServiceDep = Annotated[GuardianService, Depends(get_guardian_service)]
+
+
+def get_claims_service(session: SessionDep) -> ClaimsService:
+    return ClaimsService(
+        claims=SqlClaimRepository(session),
+        workflows=SqlWorkflowRepository(session),
+        assignments=SqlCareAssignmentRepository(session),
+        adapter=FakePayerAdapter(),
+        outbox=SqlEventOutbox(session),
+    )
+
+
+ClaimsServiceDep = Annotated[ClaimsService, Depends(get_claims_service)]
 
 
 async def get_current_user(request: Request, session: SessionDep, tokens: TokenServiceDep) -> User:

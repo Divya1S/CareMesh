@@ -61,7 +61,7 @@ async def app(migrated):
                 "messages, care_assignments, domain_event_log, processed_events, "
                 "ai_requests, risk_signals, risk_reviews, workflow_instances, "
                 "workflow_transitions, documents, document_chunks, rag_retrievals, "
-                "referrals, guardian_links, guardian_updates, "
+                "referrals, guardian_links, guardian_updates, claims, eligibility_checks, "
                 "guardian_notifications CASCADE"
             )
         )

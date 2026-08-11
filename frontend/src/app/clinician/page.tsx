@@ -134,6 +134,9 @@ export default function ClinicianPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <Button variant="ghost" onClick={() => router.push("/billing")}>
+            Billing
+          </Button>
           <Button variant="ghost" onClick={refresh}>
             Refresh
           </Button>

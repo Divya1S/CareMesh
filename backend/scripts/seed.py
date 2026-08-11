@@ -37,6 +37,7 @@ USERS = [
     ("ops@demo.caremesh.org", Role.OPS_ADMIN, "Olly Ops"),
     ("guardian@demo.caremesh.org", Role.GUARDIAN, "Gale Guardian"),
     ("school@demo.caremesh.org", Role.SCHOOL_STAFF, "Sky Counselor"),
+    ("payer@demo.caremesh.org", Role.PAYER_STAFF, "Pat Payer"),
 ]
 
 # Fictional resource documents for the knowledge library. Plain wellbeing

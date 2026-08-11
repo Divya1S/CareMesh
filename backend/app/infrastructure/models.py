@@ -347,6 +347,48 @@ class GuardianNotificationRow(Base):
     created_at: Mapped[datetime] = _created_at()
 
 
+class EligibilityCheckRow(Base):
+    """A stored payer eligibility result, produced by a labeled adapter."""
+
+    __tablename__ = "eligibility_checks"
+
+    id: Mapped[UUID] = _uuid_pk()
+    organization_id: Mapped[UUID] = mapped_column(ForeignKey("organizations.id"), nullable=False)
+    member_id: Mapped[str] = mapped_column(String(100), nullable=False)
+    eligible: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    plan_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    adapter: Mapped[str] = mapped_column(String(50), nullable=False)
+    simulated: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    checked_by: Mapped[UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    created_at: Mapped[datetime] = _created_at()
+
+
+class ClaimRow(Base):
+    """An insurance claim. State lives in workflow_instances; denial reasons
+    and resubmission notes live here for the denial tracking view."""
+
+    __tablename__ = "claims"
+    __table_args__ = (Index("ix_claims_org_created", "organization_id", "created_at"),)
+
+    id: Mapped[UUID] = _uuid_pk()
+    organization_id: Mapped[UUID] = mapped_column(ForeignKey("organizations.id"), nullable=False)
+    patient_id: Mapped[UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    submitted_by: Mapped[UUID] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    workflow_id: Mapped[UUID] = mapped_column(
+        ForeignKey("workflow_instances.id"), nullable=False, unique=True
+    )
+    eligibility_check_id: Mapped[UUID] = mapped_column(
+        ForeignKey("eligibility_checks.id"), nullable=False
+    )
+    description: Mapped[str] = mapped_column(String(500), nullable=False)
+    amount_cents: Mapped[int] = mapped_column(nullable=False)
+    member_id: Mapped[str] = mapped_column(String(100), nullable=False)
+    plan_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    denial_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    resubmit_note: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    created_at: Mapped[datetime] = _created_at()
+
+
 class CareAssignmentRow(Base):
     __tablename__ = "care_assignments"
     __table_args__ = (

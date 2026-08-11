@@ -9,6 +9,7 @@ from app.api.middleware import CorrelationIdMiddleware
 from app.api.problems import register_exception_handlers
 from app.api.routes import (
     auth,
+    claims,
     conversations,
     guardian,
     health,
@@ -60,6 +61,7 @@ def create_app() -> FastAPI:
     app.include_router(knowledge.router, prefix="/api/v1")
     app.include_router(school.router, prefix="/api/v1")
     app.include_router(guardian.router, prefix="/api/v1")
+    app.include_router(claims.router, prefix="/api/v1")
     return app
 
 

@@ -25,10 +25,12 @@ from app.infrastructure.models import (
     AIRequestRow,
     AuthSessionRow,
     CareAssignmentRow,
+    ClaimRow,
     ConversationRow,
     DocumentChunkRow,
     DocumentRow,
     DomainEventLogRow,
+    EligibilityCheckRow,
     GuardianLinkRow,
     GuardianNotificationRow,
     GuardianUpdateRow,
@@ -889,6 +891,76 @@ class SqlGuardianRepository:
             .limit(50)
         )
         return list(rows)
+
+
+class SqlClaimRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def add_eligibility_check(
+        self,
+        *,
+        check_id: UUID,
+        organization_id: UUID,
+        member_id: str,
+        eligible: bool,
+        plan_name: str,
+        adapter: str,
+        simulated: bool,
+        checked_by: UUID,
+        now: datetime,
+    ) -> None:
+        self._session.add(
+            EligibilityCheckRow(
+                id=check_id,
+                organization_id=organization_id,
+                member_id=member_id,
+                eligible=eligible,
+                plan_name=plan_name,
+                adapter=adapter,
+                simulated=simulated,
+                checked_by=checked_by,
+                created_at=now,
+            )
+        )
+
+    async def get_eligibility_check(self, check_id: UUID) -> EligibilityCheckRow | None:
+        return await self._session.get(EligibilityCheckRow, check_id)
+
+    async def add(self, **fields) -> None:
+        # The workflow row is pending in this session; flush so the
+        # workflow_id foreign key resolves (see gotchas).
+        await self._session.flush()
+        self._session.add(ClaimRow(**fields))
+
+    async def get_by_id(self, claim_id: UUID) -> ClaimRow | None:
+        return await self._session.get(ClaimRow, claim_id)
+
+    async def list_joined(
+        self, organization_id: UUID, *, submitted_by: UUID | None = None
+    ) -> list[tuple[ClaimRow, str, str]]:
+        """Claims with workflow state and patient display name."""
+        query = (
+            select(ClaimRow, WorkflowInstanceRow.state, UserRow.display_name)
+            .join(WorkflowInstanceRow, ClaimRow.workflow_id == WorkflowInstanceRow.id)
+            .join(UserRow, ClaimRow.patient_id == UserRow.id)
+            .where(ClaimRow.organization_id == organization_id)
+            .order_by(ClaimRow.created_at.desc())
+        )
+        if submitted_by is not None:
+            query = query.where(ClaimRow.submitted_by == submitted_by)
+        rows = await self._session.execute(query)
+        return [(c, s, name) for c, s, name in rows]
+
+    async def set_denial_reason(self, claim_id: UUID, reason: str | None) -> None:
+        await self._session.execute(
+            update(ClaimRow).where(ClaimRow.id == claim_id).values(denial_reason=reason)
+        )
+
+    async def set_resubmit_note(self, claim_id: UUID, note: str) -> None:
+        await self._session.execute(
+            update(ClaimRow).where(ClaimRow.id == claim_id).values(resubmit_note=note)
+        )
 
 
 class SqlCareAssignmentRepository:

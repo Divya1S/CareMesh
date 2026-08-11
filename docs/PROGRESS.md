@@ -5,13 +5,14 @@
 
 ## Current phase
 
-**School and guardian surfaces (spec P9): COMPLETE. Gate passed on
-2026-08-10** (89 backend tests, 13 frontend tests, 7/7 evals). Earlier the
-same day: the vertical slice S1 to S7, then RAG (P6).
+**Payer workflows (spec P10): COMPLETE. Gate passed on 2026-08-10** (93
+backend tests, 13 frontend tests, 7/7 evals). All ten spec surfaces now
+exist in a real minimal form. Earlier the same day: the vertical slice S1
+to S7, RAG (P6), school and guardian (P9).
 
-Next broadening candidates, pick with the human: payer workflows (P10),
-the observability compose profile, eval expansion (retrieval quality
-cases), security hardening.
+Next candidates, pick with the human: the observability compose profile
+(P12), eval expansion (P13, retrieval quality cases), security hardening
+(P14), deployment docs (P16), the final Staff Engineer review (P17).
 Phase 0 was approved by the human on 2026-08-10 and the approved plan is
 `docs/PHASE_0_PROPOSAL.md` (roadmap in section 11). All frontend work follows
 `docs/DESIGN.md` (added by the human; authoritative).
@@ -225,9 +226,31 @@ Phase 0 was approved by the human on 2026-08-10 and the approved plan is
     home surface. Seed adds school@ and guardian@demo.caremesh.org and the
     guardian link to Sam.
 
+- 2026-08-10, payer workflows (P10), validated by `./scripts/verify.sh` and
+  a browser walk of the whole lifecycle (eligibility check, submit, deny
+  with reason, resubmit with note, approve, history rail inspected; zero
+  console errors, screenshots reviewed):
+  - Claim state machine: submitted, approved, denied, resubmitted
+    (approved terminal; denials require a reason, enforced and tested).
+    Tables and migration `1fd82bbb973b` (claims, eligibility_checks, plus
+    the CLAIM workflow enum value).
+  - External payer behind the labeled `fake-payer-1` adapter
+    (`# SIMULATED`, deterministic: member ids containing INELIG are not
+    covered). Eligibility results are stored with adapter name and
+    simulated flag, and claim submission requires a passing check.
+  - Role boundaries tested: therapists bill only assigned patients and see
+    only their own claims; payer staff decide but cannot submit or reach
+    clinical surfaces; patients get 403.
+  - Events `InsuranceClaimSubmitted` and `InsuranceClaimUpdated` (spec
+    names) documented in docs/EVENTS.md.
+  - Surfaces: `/billing` (therapist: eligibility, submit, rework denials)
+    and `/payer` (claims table in mono with state chips, denied only
+    filter, required denial reason, expandable actor attributed history
+    rail per DESIGN.md 4.6). Seed adds payer@demo.caremesh.org.
+
 ## In flight
 
-- Nothing. P9 closed cleanly, working tree committed.
+- Nothing. P10 closed cleanly, working tree committed.
 
 ## Known limitations (intentional, coming in later phases)
 

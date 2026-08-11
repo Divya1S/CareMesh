@@ -433,6 +433,92 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/claims/eligibility": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Check Eligibility */
+        post: operations["check_eligibility_api_v1_claims_eligibility_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/claims": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Claims */
+        get: operations["list_claims_api_v1_claims_get"];
+        put?: never;
+        /** Submit Claim */
+        post: operations["submit_claim_api_v1_claims_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/claims/{claim_id}/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Claim History */
+        get: operations["claim_history_api_v1_claims__claim_id__history_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/claims/{claim_id}/decision": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Decide Claim */
+        post: operations["decide_claim_api_v1_claims__claim_id__decision_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/claims/{claim_id}/resubmit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Resubmit Claim */
+        post: operations["resubmit_claim_api_v1_claims__claim_id__resubmit_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -472,6 +558,69 @@ export interface components {
             score: number;
             /** Used */
             used: boolean;
+        };
+        /** ClaimDecideRequest */
+        ClaimDecideRequest: {
+            /** Approve */
+            approve: boolean;
+            /** Denial Reason */
+            denial_reason?: string | null;
+        };
+        /** ClaimResponse */
+        ClaimResponse: {
+            /**
+             * Claim Id
+             * Format: uuid
+             */
+            claim_id: string;
+            /**
+             * Workflow Id
+             * Format: uuid
+             */
+            workflow_id: string;
+            /** Patient Name */
+            patient_name: string;
+            /** Description */
+            description: string;
+            /** Amount Cents */
+            amount_cents: number;
+            /** Member Id */
+            member_id: string;
+            /** Plan Name */
+            plan_name: string;
+            /** State */
+            state: string;
+            /** Denial Reason */
+            denial_reason: string | null;
+            /** Resubmit Note */
+            resubmit_note: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /** ClaimResubmitRequest */
+        ClaimResubmitRequest: {
+            /** Note */
+            note: string;
+        };
+        /** ClaimSubmitRequest */
+        ClaimSubmitRequest: {
+            /**
+             * Patient Id
+             * Format: uuid
+             */
+            patient_id: string;
+            /** Description */
+            description: string;
+            /** Amount Cents */
+            amount_cents: number;
+            /**
+             * Eligibility Check Id
+             * Format: uuid
+             */
+            eligibility_check_id: string;
         };
         /** ConversationCreateRequest */
         ConversationCreateRequest: {
@@ -514,6 +663,27 @@ export interface components {
             chunk_count: number;
             /** Unchanged */
             unchanged: boolean;
+        };
+        /** EligibilityRequest */
+        EligibilityRequest: {
+            /** Member Id */
+            member_id: string;
+        };
+        /** EligibilityResponse */
+        EligibilityResponse: {
+            /**
+             * Eligibility Check Id
+             * Format: uuid
+             */
+            eligibility_check_id: string;
+            /** Eligible */
+            eligible: boolean;
+            /** Plan Name */
+            plan_name: string;
+            /** Adapter */
+            adapter: string;
+            /** Simulated */
+            simulated: boolean;
         };
         /** GuardianOverviewResponse */
         GuardianOverviewResponse: {
@@ -1756,6 +1926,197 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["ReferralDecideRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    check_eligibility_api_v1_claims_eligibility_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EligibilityRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EligibilityResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_claims_api_v1_claims_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClaimResponse"][];
+                };
+            };
+        };
+    };
+    submit_claim_api_v1_claims_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClaimSubmitRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClaimResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    claim_history_api_v1_claims__claim_id__history_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                claim_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OpsTransitionResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    decide_claim_api_v1_claims__claim_id__decision_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                claim_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClaimDecideRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    resubmit_claim_api_v1_claims__claim_id__resubmit_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                claim_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClaimResubmitRequest"];
             };
         };
         responses: {
