@@ -176,7 +176,7 @@ hard scope to one organization (`MCP_ORG_NAME`, defaulting to the seeded
 demo org), so cross tenant reads are impossible by construction. The
 integration test drives the server through a real MCP client round trip.
 
-## Deliberate choices (and the interview stories behind them)
+## Deliberate choices
 
 - **No agent framework.** The workflow engine, tool orchestration, and
   gateway are written from scratch on Postgres so that every retry,
