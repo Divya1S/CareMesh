@@ -14,6 +14,14 @@ an evaluation and observability layer that gates every change.
 > the default configuration comes from a clearly labeled fake provider, and
 > the UI says so on every AI element.
 
+**23 second demo:** a student asks Dira for sleep tips (agentic library
+search, cited and labeled SIMULATED), then discloses crisis thoughts
+(tools bypassed, direct crisis reply); the risk signal travels the event
+pipeline into the therapist's review queue and is accepted; the ops
+console shows the workflow history and the audited AI requests.
+
+![CareMesh demo: student chat with Dira, crisis escalation to the clinician queue, and the operations console](docs/images/demo.gif)
+
 | Student chat with Dira | Clinician risk review |
 |---|---|
 | ![Student chat](docs/images/student-chat.png) | ![Clinician queue](docs/images/clinician-queue.png) |
