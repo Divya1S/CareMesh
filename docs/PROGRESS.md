@@ -5,9 +5,19 @@
 
 ## Current phase
 
-**Hiring upgrade plan (approved 2026-08-10): complete. H1 through H6
-all done; the spec's final gate (P17) has been run, fixed, and
-recorded in docs/FINAL_REVIEW.md. The project is in a finished state.**
+**Audit and hardening (approved by the human 2026-10-12): complete.**
+A full end to end audit of the repository, run as a Senior Engineer,
+Architect, QA, and Security review, is recorded in docs/CODEBASE_AUDIT.md
+with every finding, its severity, and its status. Seven critical and
+twelve high findings were fixed in fourteen focused commits, each with a
+regression test, and the gate grew type checking, a coverage floor,
+secret scanning, a production build, and dependency audits. Gate at the
+end: 162 backend tests (86 percent coverage, floor 80), mypy clean, 17
+frontend tests, 23 eval cases, production dependency audits clean.
+
+Before that: the hiring upgrade plan (approved 2026-08-10) completed H1
+through H6 and the spec's final gate (P17), recorded in
+docs/FINAL_REVIEW.md.
 
 - H6 done 2026-08-11 (gate green; 118 backend tests): (a)
   docker/backend.Dockerfile (uv two stage, non root) plus the compose
@@ -106,6 +116,33 @@ Phase 0 was approved by the human on 2026-08-10 and the approved plan is
 `docs/DESIGN.md` (added by the human; authoritative).
 
 ## Done
+
+- 2026-10-12, audit and hardening (gate green: 162 backend tests, 17
+  frontend, 23 evals, mypy, coverage 86 percent). Critical: the crisis
+  phrase floor now runs before the model call and opens review on its own
+  when the provider fails (migration d744ccf51ef9 makes
+  risk_signals.ai_request_id nullable); Dira's memory and the chat load
+  the newest messages instead of the first page; a failed DLQ publish
+  seeks back instead of skipping the record; workflow transitions are
+  compare and swap with 409 on a race; the client refreshes tokens single
+  flight; the audit and AI logs got their own pool. High: one shared tool
+  loop that streams from the first call, keeps the assistant's tool call
+  turn, validates arguments, and tells the model about skipped calls;
+  model calls never hold a database connection on either reply path or
+  in the consumer; AI failures are 502 and 504; Redis outages fail login
+  closed and AI endpoints open; refresh token families with reuse
+  detection (migration ededa2e5230b); review queue in one query with new
+  indexes (migration 601c3bf9590b); advisory lock on appointment
+  requests; Gemini adapter with a pooled client, retries, finish reason
+  handling; chunker invariant; cancelled audit status; prompt version
+  recorded from the gateway. Medium: lifespan singletons, proxy aware
+  client address, security headers, metrics token, healthz with Redis,
+  JWT issuer and audience, next 16.4.0 and vitest 4.1.11, accessible
+  labels, error states, docs corrected (THREAT_MODEL refresh replay
+  claim, ADRs 0004, 0005, 0007). Open and documented: idempotency key on
+  message creation, offset pagination, audit row before commit for
+  success paths, five dev only npm advisories in eslint-config-next's
+  transitive tooling with no non major fix.
 
 - 2026-08-10, Phase 0: audit, proposal (all 12 sections), approval. ADRs 0001
   to 0004 recorded (Redpanda broker, fake LLM provider default, outbox
@@ -394,36 +431,38 @@ Phase 0 was approved by the human on 2026-08-10 and the approved plan is
 
 ## In flight
 
-- Nothing. P14 closed cleanly, working tree committed.
+- Nothing. The audit phase closed cleanly, working tree committed.
 
-## Known limitations (intentional, coming in later phases)
+## Known limitations (documented, not scheduled)
 
-- No rate limiting yet (Redis is running but unused; first use will be
-  documented per the conventions).
-- No audit log table yet; no domain events published yet (S3 brings the
-  outbox and Redpanda flow).
-- Ops admin role exists but has no surface until the ops console phase.
-- Frontend stores tokens in localStorage for now; the security hardening
-  phase moves them to httpOnly cookies behind a route handler.
-- Chat refreshes messages on send only; live updates (polling or SSE) come
-  with Dira in S5.
+- Frontend tokens live in localStorage; the documented fix is httpOnly
+  cookies behind Next.js route handlers.
+- Message creation has no idempotency key; a client retry after a
+  network failure can duplicate a message and a model call.
+- Lists paginate by offset; keyset pagination on the UUIDv7 ids is the
+  documented upgrade.
+- Audit rows for successful decisions are written before the business
+  transaction commits (deliberate for failures, imperfect for successes).
+- Evals run on the fake provider only; a labeled dataset and a real model
+  run are the first things a budget would buy (docs/EVALUATION.md).
+- Five high severity npm advisories remain in eslint-config-next's
+  transitive lint tooling (dev only, no non major fix available).
+- The remaining items in docs/CODEBASE_AUDIT.md section "Remaining
+  issues" are the backlog.
 
-## Next steps (broadening, pick with the human)
+## Next steps (pick with the human)
 
-The proposal (section 11) sequences the rest as: deep RAG (spec P6),
-deeper Dira and clinician workspace (P5/P8), school and guardian surfaces
-(P9), payer workflows (P10), full ops and the observability compose
-profile (P11/P12), eval expansion (P13), security hardening (P14),
-performance (P15), deployment docs (P16), final review (P17). Reasonable
-defaults if the human just says continue: RAG next (it deepens Dira with
-grounded answers and citations), then school and guardian.
+The standout plan in the session notes: a labeled risk dataset and a
+real model evaluation run, true hybrid retrieval (BM25 plus dense), a
+runtime output guardrail for Dira, httpOnly cookies, and a public demo
+deployment with the fake provider.
 
 ## Notes for the next session
 
-- Dev workers run on the host (relay, conversation consumer commands are in
-  CLAUDE.md). Containerizing api plus workers behind a compose profile is
-  deferred to the hardening phases; the proposal wanted compose processes,
-  and this deviation is recorded here on purpose.
+- Dev workers run on the host (commands in CLAUDE.md) or in containers
+  through the compose `app` profile.
+- Run `./scripts/verify.sh` before declaring anything done; it now
+  includes mypy and the coverage floor.
 
 ## Standing constraints from the human (2026-08-10)
 

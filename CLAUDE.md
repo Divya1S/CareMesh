@@ -14,7 +14,8 @@ Honesty rules that must never be broken (repeated here because they carry weight
 
 ## Current state
 
-- **Phase:** COMPLETE. All spec phases through P17 are done, and the six phase hiring upgrade plan (H1 docs and CI, H2 agentic Dira, H3 semantic embeddings, H4 real Gemini adapter, H5 MCP server, H6 containers, deployment doc, load numbers, final review) finished 2026-08-11. The final Staff Engineer review ran, its findings were fixed and re validated, and docs/FINAL_REVIEW.md records the rest. Gate: 118 backend tests, 13 frontend tests, 23 eval cases
+- **Phase:** COMPLETE, then audited. All spec phases through P17 and the hiring upgrade plan finished 2026-08-11 (docs/FINAL_REVIEW.md). On 2026-10-12 a full end to end audit (approved by the human in the session prompt) found and fixed seven critical and twelve high findings; docs/CODEBASE_AUDIT.md is the record. Gate: 162 backend tests with an 80 percent coverage floor (86 measured), mypy clean, 17 frontend tests, 23 eval cases
+- **Audit fixes to know about (2026-10-12):** the crisis phrase floor runs before the model call and opens review on its own when the provider fails (floor only signals have model `crisis-phrase-floor` and no ai_request_id); Dira's memory loads the newest messages; workflow transitions are compare and swap (409 on a race or a refused move); refresh tokens live in families and reuse revokes the family; the audit and AI logs use their own connection pool; model calls never hold a database connection (the service takes a `release` callback); the gateway has one tool loop, streams from the first call, validates tool arguments, keeps the assistant's tool call turn, and audits client disconnects as `cancelled`; Redis outages fail login closed and AI endpoints open; the consumer seeks back when a DLQ publish fails
 - **Real provider:** LLM_PROVIDER=gemini selects the real adapter (plain httpx, default model gemini-flash-latest because gemini-2.5-flash is retired for new accounts); the user's free tier key lives ONLY in gitignored backend/.env as LLM_API_KEY and must never be committed, logged, or echoed. scripts/live_check.py is the opt in live proof (passed 3/3), never in verify.sh
 - **Crisis safety is structural:** domain/risk.py has a crisis phrase floor that forces escalation and strips Dira's tools for the turn regardless of provider; do not weaken it or move it back into a provider
 - **Security:** Redis rate limiting (login per address and account, AI endpoints per user; Redis's one documented use), append only `audit_logs` for login success and failure (masked emails), review decisions, claim decisions, and event republishes. `docs/SECURITY.md` (controls and honest gaps) and `docs/THREAT_MODEL.md` (threats, mitigations, failure modes). Note: the test suite raises LOGIN_ATTEMPTS_PER_MINUTE via env in conftest because fixtures log in constantly
@@ -66,6 +67,8 @@ cd backend && uv sync                     # or: pip install -e ".[dev]"
 uv run pytest                             # all tests
 uv run pytest tests/integration -m integration
 uv run ruff check . && uv run ruff format --check .
+uv run mypy                               # type check (configured in pyproject)
+uv run pytest --cov                       # coverage, floor 80 percent
 uv run alembic upgrade head               # migrations
 
 # Frontend
@@ -103,6 +106,9 @@ uv run python -m evals.run --dataset all
 - The docker/postgres/init scripts (test database creation) only run on first container start. If the postgres volume predates a new init script, create the database manually or remove the volume.
 - Postgres runs the pgvector/pgvector:pg16 image (RAG, ADR 0006). The swap from alpine required one dev volume reset; if the volume ever predates the swap, drop it and reseed.
 - The ORM has no relationship() mappings, so parent rows must be flushed before children insert in the same transaction (documents before chunks, organizations before users). See tests/conftest.py and SqlDocumentRepository.add.
+- `frontend/.npmrc` pins `legacy-peer-deps` because npm 10.9's peer resolver crashes on vitest 4's optional peer set; `vite` and `@testing-library/dom` are therefore explicit dev dependencies. `npm ci` reproduces the tree. Node 23 prints engine warnings; CI uses 22.
+- Two engines per process: the request pool and a small audit pool (`configure_state` in app/main.py, and the consumer's own audit engine). A log write must never wait on the connection its own request is holding.
+- The test app fixture wires state through `main.configure_state` because ASGITransport does not run the lifespan; set `app.state.gateway` in a test to swap the provider.
 
 ## Session protocol
 

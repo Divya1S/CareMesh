@@ -7,13 +7,15 @@ ordered, index friendly, generated in `app/domain/ids.py`).
 ## Table groups
 
 - **Identity and tenancy:** `organizations`, `users` (role enum, Argon2
-  hash), `auth_sessions` (refresh token rotation), `care_assignments`
+  hash), `auth_sessions` (refresh token rotation, `family_id` for reuse detection), `care_assignments`
   (therapist to patient), `guardian_links` (explicit guardian
   authorization).
 - **Conversation core:** `conversations`, `messages` (sender type enum;
   AI provenance columns `ai_request_id`, `simulated`).
-- **Risk and review:** `risk_signals` (append only, full AI provenance),
-  `risk_reviews` (one human decision per signal).
+- **Risk and review:** `risk_signals` (append only, full AI provenance;
+  `ai_request_id` is null for a signal the crisis phrase floor produced
+  while the model was unavailable), `risk_reviews` (one human decision per
+  signal).
 - **Workflows:** `workflow_instances`, `workflow_transitions` (append
   only history).
 - **Events:** `domain_event_log` (transactional outbox; partial index on
@@ -30,14 +32,26 @@ ordered, index friendly, generated in `app/domain/ids.py`).
 ## Access pattern driven indexes
 
 Conversation timeline (`conversation_id, created_at`), clinician queue
-(workflow state plus signal severity), org scoped listings
-(`organization_id, created_at` on signals, claims, referrals), unpublished
-outbox (partial index), chunk similarity (HNSW).
+(workflow state plus signal severity, and `workflow_instances.subject_id`
+for the join to signals), appointment idempotency
+(`appointment_requests.conversation_id`), session families
+(`auth_sessions.family_id`), org scoped listings (`organization_id,
+created_at` on signals, claims, referrals), unpublished outbox (partial
+index), chunk similarity (HNSW).
 
 ## Rules
 
 - Append only tables are never updated or deleted: signals, transitions,
   events, AI requests, audit rows.
+- Workflow state changes are compare and swap on the state column
+  (`WHERE id = :id AND state = :from`); a stale writer gets a conflict,
+  never a lost update.
+- Two engines per process: the request pool, and a small separate pool
+  for the audit and AI request logs so a log write never waits on the
+  connection its own request is holding. Sizes are settings.
+- Appointment requests take a transaction scoped advisory lock on the
+  conversation before the one open request check, because the state they
+  check lives in another table.
 - Soft deletion is not used yet; nothing needed it. Add per table when a
   surface requires it, not speculatively.
 - Two operational gotchas (parent flush ordering without ORM

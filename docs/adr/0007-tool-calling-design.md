@@ -29,8 +29,11 @@ Security properties, deliberate:
   Unknown tool names are refused and reported back to the model; tool
   failures degrade into an honest reply instead of crashing it.
 - **Crisis precedence.** A crisis disclosure never detours into tool use;
-  the direct crisis reply wins. This is enforced by the provider scenario
-  logic and regression tested in the dira eval suite.
+  the direct crisis reply wins. Enforced in application code (the turn is
+  offered zero tools when the latest patient message contains crisis
+  language, for any provider) and regression tested in the dira eval
+  suite. The first version relied on the fake provider's scenario logic,
+  which the final review identified as a behavior, not a guarantee.
 
 Streaming uses the same path: tool rounds resolve first, then the final
 text streams to the client as SSE events (tool, delta, message), and the
@@ -42,6 +45,15 @@ audit entry is written when the stream ends.
   exactly the loop, bounds, and audit points this project exists to show.
 - Letting tools mutate freely (book appointments outright): rejected;
   human in the loop is the platform's core safety rule.
+
+## Update (2026-10-12)
+
+The loop is one shared implementation for complete() and streaming;
+streaming rounds stream from the first provider call. The model's own
+tool call turn stays in the transcript, arguments are validated against
+the declared schema before a handler runs, calls over the per round
+budget are reported back instead of dropped silently, and a failed
+mutating tool is audited as a provider error.
 
 ## Consequences
 

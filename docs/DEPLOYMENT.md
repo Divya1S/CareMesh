@@ -44,6 +44,11 @@ Recorded honestly, since none of it is done:
 2. TLS everywhere and a real CORS origin list.
 3. Broker authentication (local Redpanda runs open).
 4. A WAF or global rate limiter in front of the API.
-5. Real secrets rotation and per environment JWT secrets.
-6. And the honesty rule above all of it: this is a portfolio simulation;
+5. Real secrets rotation and per environment JWT secrets (32 bytes or
+   more; the settings refuse less outside dev).
+6. Behind the reverse proxy: `TRUST_PROXY_HEADERS=true` so the login
+   limiter buckets on the client address, `METRICS_TOKEN` so the metrics
+   port can be exposed to the scraper, and pool sizes tuned to the
+   instance count.
+7. And the honesty rule above all of it: this is a portfolio simulation;
    nothing here is validated for real patients or real clinical data.

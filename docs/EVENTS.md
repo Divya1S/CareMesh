@@ -22,9 +22,15 @@ This file documents reality only; events land here when they ship.
   `caremesh.conversation.patient_message_created`. Dead letters go to
   `<topic>.dlq`.
 - **Delivery:** at least once. Every consumer records `(consumer_group,
-  event_id)` in `processed_events` before acting, so duplicates are skipped
-  (exactly once effect). Malformed payloads go straight to the DLQ;
-  transient failures retry with backoff a bounded number of times first.
+  event_id)` in `processed_events` in the same transaction as its effects,
+  so duplicates are skipped (exactly once effect). The risk consumer works
+  in three phases: a short read transaction (duplicate pre check, message
+  load), the model call with no transaction open, then one write
+  transaction for the mark and every effect. Malformed payloads go
+  straight to the DLQ; transient failures retry with backoff a bounded
+  number of times first. If even the dead letter publish fails, the
+  consumer seeks back to the record and holds its position: a record is
+  never skipped.
 - **Data minimization:** payloads carry ids, never message content or other
   clinical text. Consumers that need content fetch it from Postgres.
 
@@ -38,8 +44,9 @@ This file documents reality only; events land here when they ship.
   transaction as the message insert).
 - **Topic:** `caremesh.conversation.patient_message_created`
 - **Consumers:** `caremesh-conversation-worker`
-  (`app/workers/conversation_consumer.py`): validates, records idempotency,
-  logs. Real risk logic plugs in here in S6.
+  (`app/workers/conversation_consumer.py`): validates the envelope, runs
+  the crisis phrase floor and the risk classifier, records the signal, the
+  escalation decision, and the idempotency mark in one transaction.
 - **Payload:** `message_id`, `conversation_id`, `patient_id`,
   `sender_type` (patient | clinician | dira | system). No content.
 - **Failure behavior:** 3 attempts with exponential backoff for transient

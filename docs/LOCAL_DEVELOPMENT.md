@@ -1,6 +1,7 @@
 # LOCAL DEVELOPMENT
 
-Everything runs locally and free. Prereqs: Docker, uv, Node 20+.
+Everything runs locally and free. Prereqs: Docker, uv, Node 20 or 22
+(CI uses 22; vitest 4 warns on 23).
 
 ## First run
 
@@ -29,24 +30,32 @@ there.
 ## Daily commands
 
 ```bash
-./scripts/verify.sh          # the gate: lint, migrations, all tests, all evals
+./scripts/verify.sh          # the gate: lint, type check, migrations, tests with coverage, evals
 ./scripts/e2e.sh             # full browser journey (boots everything itself)
 ./scripts/gen-api-types.sh   # regenerate frontend types after API changes
 docker compose --profile observability up -d   # Prometheus :9090, Grafana :3001
 ```
 
 Backend only: `uv run pytest`, `uv run pytest -m integration`,
-`uv run ruff check . && uv run ruff format --check .`,
+`uv run pytest --cov` (floor 80 percent, configured in pyproject),
+`uv run ruff check . && uv run ruff format --check .`, `uv run mypy`,
 `uv run python -m evals.run --dataset all`.
 
-Frontend only: `npm run lint && npm run typecheck && npm run test`.
+Frontend only: `npm run lint && npm run typecheck && npm run test`, and
+`npm run build` for the production build CI also runs. `frontend/.npmrc`
+pins `legacy-peer-deps` because npm 10.9's peer resolver crashes on
+vitest 4's optional peer set; `vite` and `@testing-library/dom` are
+explicit dev dependencies for that reason, and `npm ci` reproduces the
+tree.
 
 ## Configuration
 
 Copy `backend/.env.example` to `backend/.env`. Defaults work out of the
 box. The interesting switches: `LLM_PROVIDER` (fake by default; real
 providers are the only possible cost in the project), `EMBEDDING_PROVIDER`
-(local lexical by default), rate limit knobs, `LOG_JSON`.
+(local lexical by default), rate limit knobs, `LOG_JSON`, database pool
+sizes, `TRUST_PROXY_HEADERS` (only behind a proxy that sets
+`X-Forwarded-For`), and `METRICS_TOKEN`.
 
 ## Test environment notes
 

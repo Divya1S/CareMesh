@@ -37,9 +37,22 @@ payer adapter and an assignment to the patient. Denials require a reason,
 tracked on the claim and in the transition history; resubmission carries a
 correction note. Approved is terminal.
 
+## Appointment request
+
+`requested -> acknowledged`
+
+Opened by Dira's `request_appointment` tool on the patient's behalf, at
+most one open request per conversation (an advisory lock makes the check
+race safe). The assigned therapist acknowledges it in the clinician
+workspace; the tool never books anything itself.
+
 ## Guarantees shared by all workflows
 
 - State lives in one place and changes only through validated transitions.
+- A transition is a compare and swap on the state column: two concurrent
+  decisions produce one winner and one 409, never a lost update or a
+  duplicate history row. A refused move (for example resubmitting an
+  approved claim) is a 409 problem, not a server error.
 - History is append only and actor attributed ("system" for machine
   transitions).
 - Every opening and every decision emits a domain event (docs/EVENTS.md).

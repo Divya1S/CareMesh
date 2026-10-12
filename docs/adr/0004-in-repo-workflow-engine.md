@@ -27,3 +27,13 @@ reason, and correlation ID.
 - We own retry and timeout logic, which is the point of the exercise.
 - Scope risk: the engine stays minimal (states, transitions, retries, history)
   and gains features only when a concrete workflow needs them, gated by a new ADR.
+
+## Update (2026-10-12)
+
+What exists: four declared state machines (risk escalation, referral,
+claim, appointment request), validated transitions implemented as a
+compare and swap on the state column (a stale decision gets a 409), and
+append only actor attributed history. What does not exist, despite the
+context above: retries, timers (for example re escalating a review nobody
+claimed), and compensation. The first workflow that needs a timer should
+adopt a durable engine rather than grow this one.

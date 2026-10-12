@@ -39,11 +39,11 @@ console shows the workflow history and the audited AI requests.
 | **MCP server** | `backend/mcp_server/`: a stdio MCP server any MCP client (Claude Desktop, Claude Code) can connect to, exposing two allow listed read only tools scoped to one organization; tested through a real MCP client round trip |
 | **RAG that is real** | Versioned documents, paragraph chunking with overlap, embeddings in pgvector with an HNSW index, tenant scoped cosine search plus keyword rerank, grounded answers with visible cited vs retrieved sources, and a stored retrieval trail per question |
 | **Evals as a gate** | Three deterministic suites (risk classification with escalation precision and recall, Dira reply safety properties, retrieval hit@k and MRR), run in CI and locally, gated at 100 percent; results stored with model and dataset versions plus latency, token, and cost usage |
-| **AI safety architecture** | The model never decides: escalation is deterministic domain code over structured output; crisis paths route to human review; clinician accept, edit, and reject are explicit audited acts; prompt injection cases are regression tested |
+| **AI safety architecture** | The model never decides: escalation is deterministic domain code over structured output; the crisis phrase floor runs before the model, so a provider outage still opens human review; clinician accept, edit, and reject are explicit audited acts; prompt injection cases are regression tested |
 | **Event driven systems** | Transactional outbox, a relay publishing to Redpanda (Kafka API), idempotent consumers (one transaction covers the idempotency mark and all effects), bounded retries, dead letter topics, safe replay from the ops console |
 | **Workflow engineering** | A small explicit state machine engine: risk escalation, school referrals, and insurance claims, each with validated transitions and append only, actor attributed history |
 | **LLMOps and cost engineering** | Per request cost and token accounting, Prometheus metrics with a provisioned Grafana dashboard, rate limits on AI bearing endpoints, and a fake first provider strategy that keeps all development at zero dollars |
-| **Security engineering** | Argon2id auth with rotating single use refresh tokens, RBAC plus resource level authorization on every use case, tenant isolation tested cross org, Redis rate limiting, an append only audit trail, a written threat model |
+| **Security engineering** | Argon2id auth with rotating refresh tokens in families (reuse revokes the family), RBAC plus resource level authorization on every use case, tenant isolation tested cross org, Redis rate limiting with an explicit fail closed or fail open policy per endpoint, compare and swap workflow transitions, an append only audit trail, a written threat model, secret scanning and dependency audits in CI |
 | **Full stack product** | FastAPI clean architecture backend, Next.js App Router frontend with a token based design system, six role surfaces, OpenAPI generated types, Playwright E2E |
 
 ## Architecture
@@ -89,8 +89,11 @@ workflow, AI call, and event, including replaying events safely.
 
 | Metric | Value |
 |---|---|
-| Backend tests (unit + integration against real Postgres, Redis, Redpanda) | 118 |
-| Frontend tests | 13 |
+| Backend tests (unit + integration against real Postgres, Redis, Redpanda) | 162 |
+| Backend line coverage (floor 80 percent in CI) | 86 percent |
+| Backend type check (mypy) | clean |
+| Frontend tests | 17 |
+| Production dependency advisories (pip-audit, npm audit, in CI) | 0 |
 | Eval cases (risk, Dira safety and tool use, retrieval) | 23 (20 gated under the default lexical embeddings, all 23 under fastembed) |
 | Escalation precision / recall on the eval set | 1.0 / 1.0 |
 | Retrieval hit@1 / MRR: lexical embeddings (default) | 0.5 / 0.583 |
@@ -112,7 +115,7 @@ both spaces, are written up in [docs/EVALUATION.md](docs/EVALUATION.md).
 
 ## Quickstart
 
-Prereqs: Docker, uv, Node 20+.
+Prereqs: Docker, uv, Node 20 or 22.
 
 ```bash
 docker compose up -d                    # Postgres (pgvector), Redis, Redpanda
@@ -140,7 +143,7 @@ Then open http://localhost:3000 and sign in (password `caremesh-demo`):
 | Guardian | guardian@demo.caremesh.org | Guardian portal |
 | Payer staff | payer@demo.caremesh.org | Claims review |
 
-One command gates everything (lint, migrations, tests, evals):
+One command gates everything (lint, type check, migrations, tests with a coverage floor, evals):
 
 ```bash
 ./scripts/verify.sh
@@ -244,6 +247,7 @@ paid observability (tracing spans across the event pipeline).
 | [docs/LOCAL_DEVELOPMENT.md](docs/LOCAL_DEVELOPMENT.md) | Everything about running it |
 | [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | Paper cloud mapping, clearly never deployed |
 | [docs/FINAL_REVIEW.md](docs/FINAL_REVIEW.md) | The closing six perspective review: findings, fixes, accepted gaps |
+| [docs/CODEBASE_AUDIT.md](docs/CODEBASE_AUDIT.md) | The 2026-10-12 end to end audit: findings by severity, what was fixed, what remains |
 | [docs/DESIGN.md](docs/DESIGN.md) | The design system and its rules |
 | [docs/adr/](docs/adr/) | Architecture decision records |
 

@@ -20,7 +20,8 @@ The API exposes Prometheus metrics at `GET /metrics`:
 |---|---|---|
 | `caremesh_http_requests_total{method,path,status}` | counter | Requests; paths are normalized (`:id` for UUIDs) to bound cardinality |
 | `caremesh_http_request_duration_seconds` | histogram | Latency by method and normalized path |
-| `caremesh_ai_requests_total{provider,prompt,status,simulated}` | counter | Every AI Gateway call, including failures |
+| `caremesh_ai_requests_total{provider,prompt,status,simulated}` | counter | Every AI Gateway call, including failures; status is ok, validation_failed, timeout, provider_error, or cancelled (client left mid stream) |
+| `caremesh_rate_limiter_failures_total{scope,policy}` | counter | Redis failures seen by the rate limiter and the policy applied (closed for login, open for AI endpoints) |
 | `caremesh_ai_tokens_total{direction}` | counter | Input and output tokens |
 | `caremesh_ai_cost_usd_total` | counter | Cumulative spend (0 on the fake provider) |
 | `caremesh_workflows_by_state{workflow_type,state}` | gauge | Current workflow instances (refreshed every 15s from Postgres) |
@@ -29,7 +30,9 @@ The API exposes Prometheus metrics at `GET /metrics`:
 
 The workflow, review queue, and outbox gauges are refreshed by a
 background task in the API (every 15 seconds), so they reflect database
-truth, not in process guesses.
+truth, not in process guesses. `/metrics` is open by default and requires
+a bearer token when `METRICS_TOKEN` is set. `/healthz` reports the
+database (503 when down) and Redis (`degraded` when down).
 
 ## Dashboards
 

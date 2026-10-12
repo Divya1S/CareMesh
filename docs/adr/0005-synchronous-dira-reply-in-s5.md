@@ -1,6 +1,11 @@
 # ADR 0005: Dira replies synchronously in the request during S5
 
-Status: accepted (default chosen during S5, 2026-08-10)
+Status: accepted (default chosen during S5, 2026-08-10); updated
+2026-10-12: the streaming endpoint is now the primary path, the patient
+message commits before any model call on both paths, and the request's
+database connection is released before the provider is called, so the
+"does not belong inside a request transaction" concern below no longer
+applies. The reply is still generated in the request, not by a consumer.
 
 ## Context
 

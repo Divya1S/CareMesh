@@ -8,14 +8,29 @@ protocol, never a vendor SDK. The gateway owns:
 - **Prompt registry** (`prompts.py`): named, versioned prompts. Unknown
   prompts are refused; every audit row records the version used.
 - **Structured outputs:** a Pydantic schema per call, validated with one
-  bounded retry, then a typed `AIValidationError`. Never silent
-  acceptance, never silent dropping.
-- **Timeouts** and typed failures (`AITimeoutError`, `AIProviderError`).
+  bounded retry that feeds the validation error back to the model, then a
+  typed `AIValidationError`. Never silent acceptance, never silent
+  dropping. Only chunk ids the model was actually given count as
+  citations.
+- **One tool loop** (ADR 0007), shared by `complete()` and
+  `stream_reply()`: at most three rounds and one executed call per round.
+  Arguments are checked against the tool's declared JSON schema before a
+  handler runs; calls over the per round budget are reported to the model
+  rather than dropped; the model's own call turn stays in the transcript
+  so the next round sees a faithful history. Streaming rounds stream from
+  the first provider call, so a reply is never generated twice.
+- **Timeouts** per provider call and typed failures (`AITimeoutError`,
+  `AIProviderError`), mapped to 504 and 502 at the API, never 500.
 - **Auditing:** every call, success or failure, writes an `ai_requests`
-  row (provider, model, prompt version, tokens, cost, latency, status,
-  validation result, simulated flag, correlation id) in its own
-  transaction so failures survive rollbacks. Prometheus counters increment
-  in the same code path.
+  row (provider, model, prompt version, tokens summed across rounds, cost,
+  latency, status, validation result, simulated flag, correlation id,
+  transcript with tool calls) through its own connection pool so failures
+  survive rollbacks and a log write never waits on its own request. A
+  client that disconnects mid stream is audited as `cancelled`, not
+  `ok`. Prometheus counters increment in the same code path.
+- **No transaction during a model call:** both reply paths and the risk
+  consumer commit and release the database connection before calling the
+  provider, so a slow model never pins the pool.
 
 ## Providers
 
@@ -32,9 +47,13 @@ cost money.
 (`infrastructure/ai/gemini_provider.py`): plain httpx against the REST
 API, no vendor SDK, mapping completions, structured JSON output, tool
 calls, and SSE streaming onto the same request and response types the
-fake provider uses. It needs `LLM_API_KEY` (free tier works) and defaults
-to the `gemini-flash-latest` alias so provider model retirements do not
-break it. `scripts/live_check.py` is the opt in proof that a real model
+fake provider uses. One pooled HTTP client lives for the provider's
+lifetime (the app builds providers once at startup); 429 and 5xx answers
+are retried with jitter; a safety blocked answer raises instead of
+returning an empty reply; a truncated answer reports `MAX_TOKENS` as its
+finish reason; parallel calls to one tool get distinct ids. It needs
+`LLM_API_KEY` (free tier works) and defaults to the `gemini-flash-latest`
+alias so provider model retirements do not break it. `scripts/live_check.py` is the opt in proof that a real model
 flows through the gateway with `simulated=false`; it never runs in
 verify.sh or CI. Anthropic and OpenAI adapters would follow the same
 shape but have no free tier; an Ollama adapter for local models is the
@@ -49,6 +68,10 @@ documented next free provider.
   (`risk_signal` v1, schema validated). It produces a structured signal;
   it never decides. `escalation_required` in `app/domain/risk.py` is
   deterministic, unit tested code, and it opens the human review workflow.
+  The crisis phrase floor is evaluated before the model is called: when
+  the floor matches and the provider fails, the review workflow still
+  opens with a floor only signal (model `crisis-phrase-floor`, no AI
+  request behind it) and the failed call stays audited.
 - **Knowledge:** grounded answers over retrieved chunks
   (`knowledge_answer` v1) with citations; declines without calling the
   model when nothing relevant is retrieved.
@@ -70,7 +93,8 @@ suggestion silently become a clinician decision: accept, edit, and reject
 are explicit audited acts that resolve a workflow. Crisis category signals
 always escalate regardless of severity score, and a deterministic crisis
 phrase floor in `domain/risk.py` forces escalation even when a model
-(real, or steered by the message itself) under classifies. Crisis
+(real, or steered by the message itself) under classifies, and even when
+the model cannot answer at all. Crisis
 precedence over tools is structural, not a prompt hope: the application
 layer offers Dira zero tools on a turn whose latest patient message
 contains crisis language, so no provider can detour a crisis disclosure
