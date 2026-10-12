@@ -1,478 +1,97 @@
-# PROGRESS
+# Project History and Current State
 
-> Session memory for CareMesh AI. A fresh session must be able to resume from
-> this file alone. Read `CLAUDE.md` first, then this file, before doing anything.
+The session memory for this repository. A new working session reads
+`CLAUDE.md` first, then this file. It records what was built, in what
+order, and what remains open; the other files under `docs/` describe the
+system as it is.
 
-## Current phase
+## Current state
 
-**Audit and hardening (approved by the human 2026-10-12): complete.**
-A full end to end audit of the repository, run as a Senior Engineer,
-Architect, QA, and Security review, is recorded in docs/CODEBASE_AUDIT.md
-with every finding, its severity, and its status. Seven critical and
-twelve high findings were fixed in fourteen focused commits, each with a
-regression test, and the gate grew type checking, a coverage floor,
-secret scanning, a production build, and dependency audits. Gate at the
-end: 170 backend tests (86 percent coverage, floor 80), mypy clean, 18
-frontend tests, 23 eval cases, production dependency audits clean, and
-an independent review of the audit's own diff (two confirmed defects in
-the fixes, both corrected with real server tests; see CODEBASE_AUDIT.md).
+All phases of the build specification are complete, and a full codebase
+audit (2026-10-12, recorded in `CODEBASE_AUDIT.md`) has been applied.
+The gate at the end of the audit: 170 backend tests with an 80 percent
+coverage floor (86 percent measured), mypy clean, 18 frontend tests, 23
+eval cases, production dependency audits clean, and the browser journey
+passing. Nothing is in flight; the working tree is committed.
 
-Before that: the hiring upgrade plan (approved 2026-08-10) completed H1
-through H6 and the spec's final gate (P17), recorded in
-docs/FINAL_REVIEW.md.
+## History
 
-- H6 done 2026-08-11 (gate green; 118 backend tests): (a)
-  docker/backend.Dockerfile (uv two stage, non root) plus the compose
-  app profile running api, relay, and consumer with a one shot migrate
-  container; chat to risk signal verified end to end against
-  containers; a root .dockerignore keeps backend/.env out of images.
-  (b) docs/DEPLOYMENT.md, a paper GCP mapping labeled never deployed.
-  (c) backend/scripts/loadtest.py with honest numbers in the README
-  (chat with Dira reply p95 37ms, authed list p95 82ms at concurrency
-  20, inside the platform's own rate limits). (d) P17 final review:
-  three parallel six perspective review passes; all high and medium
-  findings fixed and re validated (structural crisis over tools guard
-  plus a deterministic crisis phrase floor in domain/risk.py, SSE
-  commit before streaming, worker crash resilience, safe gateway audit
-  writes, bounded idempotent tool loop, two bucket login limiter,
-  X-Request-ID validation, Redis timeouts and atomic limiter, audited
-  ops transcript reads, streaming provenance from a start event,
-  enforced eval gates, doc corrections). Findings, fixes, and accepted
-  gaps: docs/FINAL_REVIEW.md.
+**2026-08-10, foundation and the vertical slice.** Phase 0 produced the
+architecture proposal and ADRs 0001 to 0004 (Redpanda as the broker, the
+fake LLM provider as the default, the outbox pattern, a small workflow
+engine in the repository). The vertical slice followed in seven steps:
+the compose stack, clean layer backend, Alembic migrations, auth with
+rotating refresh tokens, and RBAC with resource level authorization
+(S1); the Next.js student app on the design token system with generated
+API types (S2); the transactional outbox, relay, and idempotent consumer
+with dead letters (S3); the AI gateway with the prompt registry,
+structured output validation, full request auditing, and the fake
+provider with injectable failures (S4); Dira replies with visible
+provenance (S5); the risk signal agent, deterministic escalation, the
+review workflow, and the clinician queue (S6); the operations console,
+the eval runner with a golden dataset, and the Playwright journey (S7).
 
-- H5 done 2026-08-11 (gate green; 114 backend tests): MCP server at
-  backend/mcp_server (mcp SDK 2.0, stdio) with two allow listed read
-  only tools: search_resources (KnowledgeService.retrieve with
-  citations) and get_platform_stats (org scoped counts). Tenant scope
-  is hard: MCP_ORG_NAME resolves one organization, unknown names error.
-  Integration test drives it through the SDK's real Client over the in
-  memory transport. README has connect snippets for Claude Desktop and
-  Claude Code; THREAT_MODEL gained the MCP boundary row. SDK 2.0
-  gotchas: FastMCP is now mcp.server.mcpserver.MCPServer, tools must
-  annotate returns as dict[str, Any] (bare dict falls back to text
-  content, structured_content stays None), and the result field is
-  structured_content not structuredContent.
+**2026-08-10, broadening.** The RAG platform on pgvector with versioned
+documents, lexical embeddings, tenant scoped retrieval, reranking, and
+cited answers (ADR 0006); school referrals and the guardian portal with
+least privilege by construction; payer eligibility checks behind a
+labeled fake adapter and a claim state machine; Prometheus metrics with
+a provisioned Grafana dashboard; the Dira safety and retrieval eval
+suites; and security hardening with Redis rate limits, an append only
+audit trail, `SECURITY.md`, and `THREAT_MODEL.md`.
 
-- H4 done 2026-08-11 (gate green; 112 backend tests): real Gemini
-  adapter (`infrastructure/ai/gemini_provider.py`, plain httpx, no
-  vendor SDK) behind the existing gateway: completions, structured JSON
-  output, tool call mapping (functionCall and functionResponse pairs),
-  and SSE streaming. Selected by LLM_PROVIDER=gemini plus LLM_API_KEY
-  (the user's free tier key lives only in gitignored backend/.env; it
-  briefly sat in the tracked .env.example under a typo name but was
-  moved before any commit, so it never reached git history).
-  `scripts/live_check.py` is the opt in proof, never in verify.sh or
-  CI; it passed 3/3 live: real reply, schema validated risk
-  classification (low_mood severity 1), and a stream, all audited with
-  simulated=false at $0. Scope decision with the user: no Anthropic or
-  OpenAI adapters (no free tier breaks the zero cost rule and a second
-  identical adapter adds no signal); an Ollama adapter is the
-  documented next free provider. Gotcha: gemini-2.5-flash is retired
-  for new accounts (404), so the default model is the rolling
-  gemini-flash-latest alias.
+**2026-08-11, upgrade plan and final review.** Documentation and CI;
+agentic Dira with a bounded tool loop and SSE streaming (ADR 0007);
+semantic embeddings through fastembed with a measured comparison against
+the lexical default; a real Gemini adapter proven by an opt in live
+check; an MCP server with two read only tools; a containerized backend,
+a paper deployment design, and load numbers. The final six perspective
+review (`FINAL_REVIEW.md`) found six high severity issues, all fixed and
+re validated.
 
-- H3 done 2026-08-11 (gate green; 23 gated eval cases): fastembed
-  semantic embeddings (BAAI/bge-small-en-v1.5, local ONNX, one time
-  ~90MB download, 384 dims so no schema change) behind
-  EMBEDDING_PROVIDER; chunks record their embedding provider and search
-  filters to one space (migration 8b6cb465d1ab);
-  `scripts/reingest.py` re-embeds after a switch. Measured comparison on
-  the retrieval suite: lexical hit@1 0.5 / MRR 0.583, semantic 1.0 /
-  1.0, three paraphrase cases lexical misses and semantic finds at rank
-  one. Real finding recorded in ADR 0006 and EVALUATION.md: absolute
-  similarity thresholds do not transfer between embedding spaces, so
-  each provider carries a measured min_answer_score (0.05 lexical, 0.38
-  fastembed) and off domain refusal holds in both.
+**2026-10-12, codebase audit.** An end to end audit found and fixed seven
+critical and twelve high findings, each with a regression test, and an
+independent review of those fixes found and corrected two more defects.
+Highlights: the crisis phrase floor runs before the model call and opens
+review on its own when the provider fails; Dira's memory reads the newest
+messages; workflow transitions are compare and swap; refresh tokens live
+in families with reuse detection; the audit logs use their own connection
+pool; model calls never hold a database connection; streaming generates
+each reply once with a faithful tool transcript; the API edge has an
+explicit Redis failure policy, security headers, and correct status
+codes; the gate gained type checking, a coverage floor, secret scanning,
+a production build, and dependency audits. `CODEBASE_AUDIT.md` has the
+full list and the remaining issues in priority order.
 
-- H1 done 2026-08-11: README with screenshots, diagram, capability map;
-  ARCHITECTURE, AI_ARCHITECTURE, WORKFLOWS, API, DATABASE,
-  LOCAL_DEVELOPMENT docs; MIT license; GitHub Actions CI running the full
-  verify gate (green on the first run); repo description and topics set.
-- H2 done 2026-08-11 (gate: 105 backend tests, 13 frontend, 20/20 eval
-  cases, e2e passed, streaming and tool use verified in the browser with
-  reviewed screenshots): the gateway owns a bounded tool loop (ADR 0007)
-  with every executed call audited in ai_requests.tool_calls (migration
-  74781dbf8d62); Dira's allow listed tools are search_resources (agentic
-  RAG over the tenant's library, citations in the reply) and
-  request_appointment (opens an appointment_request workflow, migration
-  1dd83da070ad, AppointmentRequested event, acknowledged by the therapist
-  in the workspace); crisis disclosures bypass tools entirely (eval
-  gated); SSE streaming endpoint (saved, tool, delta, message events)
-  with the chat rendering live deltas and tool activity lines; dira eval
-  suite grew to 9 cases including tool selection and crisis precedence.
-  Honest note for H3: a "sleeping better" paraphrase retrieved the wrong
-  document under lexical embeddings, exactly the gap semantic embeddings
-  close. The plan lives in the session plan file and here: H1 docs
-and CI, H2 agentic Dira (tool calling plus SSE streaming), H3 semantic
-embeddings (fastembed, approved ~90MB download) with a lexical vs
-semantic eval comparison, H4 real Gemini and Anthropic adapters (user
-will create a free Gemini key when asked), H5 an MCP server exposing
-CareMesh tools, H6 Dockerfiles, deployment docs, load numbers, and the
-final Staff Engineer review (P17).
+## Known limitations
 
-All spec phases through security hardening (P14) are complete: the
-vertical slice S1 to S7, RAG (P6), school and guardian (P9), payer
-(P10), observability (P12), eval expansion (P13), security (P14).
-Phase 0 was approved by the human on 2026-08-10 and the approved plan is
-`docs/PHASE_0_PROPOSAL.md` (roadmap in section 11). All frontend work follows
-`docs/DESIGN.md` (added by the human; authoritative).
-
-## Done
-
-- 2026-10-12, audit and hardening (gate green: 170 backend tests, 18
-  frontend, 23 evals, mypy, coverage 86 percent). Critical: the crisis
-  phrase floor now runs before the model call and opens review on its own
-  when the provider fails (migration d744ccf51ef9 makes
-  risk_signals.ai_request_id nullable); Dira's memory and the chat load
-  the newest messages instead of the first page; a failed DLQ publish
-  seeks back instead of skipping the record; workflow transitions are
-  compare and swap with 409 on a race; the client refreshes tokens single
-  flight; the audit and AI logs got their own pool. High: one shared tool
-  loop that streams from the first call, keeps the assistant's tool call
-  turn, validates arguments, and tells the model about skipped calls;
-  model calls never hold a database connection on either reply path or
-  in the consumer; AI failures are 502 and 504; Redis outages fail login
-  closed and AI endpoints open; refresh token families with reuse
-  detection (migration ededa2e5230b); review queue in one query with new
-  indexes (migration 601c3bf9590b); advisory lock on appointment
-  requests; Gemini adapter with a pooled client, retries, finish reason
-  handling; chunker invariant; cancelled audit status; prompt version
-  recorded from the gateway. Medium: lifespan singletons, proxy aware
-  client address, security headers, metrics token, healthz with Redis,
-  JWT issuer and audience, next 16.4.0 and vitest 4.1.11, accessible
-  labels, error states, docs corrected (THREAT_MODEL refresh replay
-  claim, ADRs 0004, 0005, 0007). Open and documented: idempotency key on
-  message creation, offset pagination, audit row before commit for
-  success paths, five dev only npm advisories in eslint-config-next's
-  transitive tooling with no non major fix.
-
-- 2026-08-10, Phase 0: audit, proposal (all 12 sections), approval. ADRs 0001
-  to 0004 recorded (Redpanda broker, fake LLM provider default, outbox
-  pattern, workflow engine in the repo).
-- 2026-08-10, S1 Foundation, all validated by `./scripts/verify.sh` (green):
-  - `docker-compose.yml`: Postgres 16 (host port 5433, see gotchas in
-    CLAUDE.md), Redis 7, Redpanda v24.2 in dev mode, all with healthchecks.
-    A test database `caremesh_test` is created by an init script.
-  - Backend in clean layers under `backend/app/`: `domain/` (entities, UUIDv7
-    generator, zero framework imports), `application/` (ports, authorization
-    policies, auth and conversation use cases), `infrastructure/` (SQLAlchemy
-    models and repositories, Argon2 hashing, JWT service, structlog setup,
-    settings), `api/` (thin routes, problem details errors, correlation ID
-    middleware).
-  - Alembic migration `e95545ccf66a`: organizations, users, auth_sessions,
-    conversations, messages, care_assignments, with intentional indexes.
-  - Auth: login, single use rotating refresh tokens backed by an
-    auth_sessions table, `/api/v1/auth/me`. RBAC roles plus resource level
-    policies: patients see only their own conversations, therapists only
-    assigned patients, cross tenant access reads as 404, other roles denied.
-  - API: `/api/v1/conversations` CRUD plus messages, paginated, all behind
-    bearer auth. `/healthz` checks the database.
-  - Tests: 32 passing (unit: ids, authorization policies, security; API
-    integration against dockerized Postgres through the real migrations).
-  - `backend/scripts/seed.py` (idempotent demo data,
-    student@demo.caremesh.org / therapist / ops, password caremesh-demo),
-    `backend/.env.example`, `scripts/verify.sh`.
-  - Live smoke test performed: uvicorn on 8000, login, create conversation,
-    post message, 401 without token.
-
-- 2026-08-10, S2 student app, all validated by `./scripts/verify.sh` (green)
-  and a Playwright browser smoke test (welcome, login, create conversation,
-  send message, reload persists, crisis panel, zero console errors):
-  - Next.js 16 app under `frontend/` with the DESIGN.md token system
-    (`src/styles/tokens.css`, rose/gold palette, no blue, gold reserved for
-    AI), fonts Sora / Plus Jakarta Sans / JetBrains Mono via next/font.
-  - Core components on tokens: Button, Card, Chip, AIFrame (AI provenance
-    wrapper with SIMULATED chip, built early per design), ChatBubble
-    (patient/dira/clinician variants), EmptyState, Field.
-  - Pages: lite welcome page (thread illustration, honesty banner), login,
-    chat (left rail with disabled "soon" surfaces, conversation list, new
-    conversation, composer, crisis resources panel always in the header).
-  - API client with problem details parsing and automatic refresh token
-    rotation retry; TypeScript API types generated from the backend OpenAPI
-    schema (`scripts/gen-api-types.sh`, regenerate after API changes).
-  - Backend: CORS for http://localhost:3000 via settings.
-  - Frontend tests: vitest + testing library (9 tests: AIFrame provenance,
-    ChatBubble labeling, token storage). verify.sh now runs frontend lint,
-    typecheck, and tests. Playwright installed (dev dep) for smoke and later
-    real E2E.
-
-- 2026-08-10, S3 events online, validated by `./scripts/verify.sh` (36 backend
-  tests green) and a live three process demo (API + relay + consumer: one
-  request's correlation id observed across the outbox row, the relay publish
-  log, and the consumer processed log):
-  - Outbox `domain_event_log` and idempotency ledger `processed_events`
-    (migration `cf719708a06e`). `PatientMessageCreated` v1 is written in the
-    same transaction as the message insert; payloads carry ids only, never
-    content. Documented in `docs/EVENTS.md`.
-  - Relay worker (`app.workers.relay`): FOR UPDATE SKIP LOCKED batches,
-    publishes to `caremesh.conversation.patient_message_created` keyed by
-    organization id, marks `published_at`.
-  - Consumer worker (`app.workers.conversation_consumer`, group
-    `caremesh-conversation-worker`): envelope validation, exactly once
-    effect via `processed_events`, bounded retries with backoff, dead
-    letters to `<topic>.dlq`. S6 plugs risk analysis into this skeleton.
-  - Integration tests cover: outbox written transactionally with the request
-    correlation id, relay publish and mark, consumer idempotency
-    (processed then duplicate), and a poison message landing on the DLQ.
-
-- 2026-08-10, S4 AI Gateway, validated by `./scripts/verify.sh` (47 backend
-  tests green):
-  - `AIGateway` in the application layer: resolves versioned prompts from
-    the registry (`dira_reply` v1, `risk_signal` v1), enforces a timeout,
-    validates structured outputs against a Pydantic schema with one bounded
-    retry then a typed `AIValidationError`, and logs **every** call
-    (success, validation failure, timeout, provider error) to the
-    `ai_requests` table (migration `20e15ec02c23`) with provider, model,
-    prompt version, tokens, cost, latency, correlation id, and the
-    simulated flag. The log writes in its own session so failures survive
-    the caller's rollback.
-  - `FakeLLMProvider` (`# SIMULATED`, ADR 0002): default via
-    `LLM_PROVIDER=fake`. Deterministic keyword scenarios (crisis, low mood,
-    exam stress, appointment, default), schema shaped risk JSON, zero cost,
-    always `simulated=True`. Failure injection markers
-    `[[fail:timeout]]`, `[[fail:malformed]]`, `[[fail:error]]`.
-  - Provider factory: `fake` works, test proves a stub swap by name, and
-    selecting anthropic/openai/gemini fails loudly with a clear message
-    that real adapters arrive only when paid usage is switched on.
-  - Tests: fake provider determinism and scenarios (unit), gateway logging
-    of ok / validation_failed / timeout, structured output roundtrip,
-    unknown prompt rejection (integration).
-
-- 2026-08-10, S5 Dira minimal, validated by `./scripts/verify.sh` (52 backend
-  and 11 frontend tests green) and a browser smoke test with a reviewed
-  screenshot (gold Dira bubble, ✦ label, SIMULATED chip, zero console errors):
-  - Patient messages get a Dira reply through the gateway (`dira_reply` v1,
-    fake provider), generated synchronously in the request (ADR 0005) with
-    the last 12 messages as conversation memory. Clinician messages get no
-    reply. Gateway failures are swallowed after being audited in
-    `ai_requests`, so Dira being down never blocks the patient's message
-    (tested with the `[[fail:error]]` marker).
-  - Messages carry AI provenance (`ai_request_id`, `simulated`, migration
-    `7af8902c8905`) and the API exposes the simulated flag.
-    `AIResponseGenerated` v1 goes to the outbox in the same transaction and
-    is documented in `docs/EVENTS.md`.
-  - Chat UI: Dira bubbles show the SIMULATED chip from the API flag, and the
-    header carries the persistent disclosure that Dira is an AI companion,
-    not a therapist.
-
-- 2026-08-10, S6 risk signal and clinician review, validated by
-  `./scripts/verify.sh` (64 backend and 13 frontend tests green) and a live
-  four process browser demo (API, relay, consumer, frontend): a student's
-  crisis message flowed through Redpanda into the Risk Signal agent, opened
-  a workflow, appeared in the therapist's review queue in the gold AI frame
-  with SIMULATED and severity labels, and was accepted with an audited
-  resolution. Zero console errors.
-  - Domain: `risk.py` (RiskSignal, RiskReview, deterministic
-    `escalation_required`: self harm and crisis always escalate, severity 2
-    and up escalates) and `workflows.py` (explicit state machine,
-    `validate_transition`, append only history). Tables and migration
-    `de7fe2fdc2ca`: risk_signals, risk_reviews (unique per signal),
-    workflow_instances, workflow_transitions.
-  - Consumer rework: idempotency mark and ALL effects (signal, workflow,
-    outbox events) commit in one transaction, so retries and duplicates are
-    safe; a failed analysis leaves no partial state (tested). Malformed AI
-    output dead letters after bounded retries (tested).
-  - Events: RiskSignalDetected, RiskReviewRequired, HumanReviewCompleted,
-    documented in docs/EVENTS.md. Evidence text never enters payloads.
-  - Review API: GET /api/v1/reviews (therapist, assigned patients only) and
-    POST /api/v1/reviews/{workflow_id} (accept, edit with severity override,
-    reject; terminal states refuse a second decision). Authorization tested:
-    unassigned therapist empty and 403, patient 403.
-  - Clinician UI at /clinician: queue items inside AIFrame with provenance,
-    severity as icon plus text (SeverityLabel), accept / edit / reject with
-    the frame transitioning to the rose approved state. Login now routes
-    therapists to /clinician.
-
-- 2026-08-10, S7 ops console, evals, and the E2E journey, closing the slice.
-  Validated by `./scripts/verify.sh` (backend, frontend, and now evals) and
-  `./scripts/e2e.sh` (real browser journey with reviewed screenshots):
-  - Ops API under `/api/v1/ops` (ops_admin only, org scoped, tested):
-    workflows with full transition history and state filter, AI request
-    inspector (list plus detail with prompt messages and response), event
-    outbox listing, safe event republish (clears published_at; consumers
-    are idempotent so replays are safe, tested), and a DLQ viewer that
-    reads the dead letter topic with a throwaway consumer group.
-  - Ops console UI at `/ops`: dense light theme per DESIGN.md 4.7, status
-    chips, mono ids, expandable workflow history and AI request detail,
-    republish with a confirm dialog that explains idempotency, dead
-    letters section. Ops admins land there after login.
-  - Evals: `backend/evals/` golden dataset v1 (7 cases: normal, ambiguous,
-    safety, prompt injection, malformed output) runs the real gateway and
-    risk_signal prompt against the fake provider, checks classification
-    AND the deterministic escalation decision, writes results with model
-    and dataset versions, and fails verify.sh below 100 percent.
-  - E2E: `frontend/e2e/journey.mjs` plus `scripts/e2e.sh` boot the full
-    stack (API, relay, consumer, frontend), then drive student message,
-    Dira reply, therapist accept, and ops visibility in headless Chromium.
-
-- 2026-08-10, RAG (spec P6), validated by `./scripts/verify.sh` and a browser
-  check of `/resources` with a reviewed screenshot (grounded answer in the
-  AI frame with SIMULATED chip and a citations row; zero console errors):
-  - Postgres swapped to the pgvector image (ADR 0006; one dev volume reset,
-    recorded in gotchas). Migration `0a19fa7b0620`: documents (versioned by
-    source_name, status lifecycle ingesting/ready/failed/superseded),
-    document_chunks (vector(384), HNSW cosine index), rag_retrievals (the
-    groundedness audit trail: what was retrieved, what was cited).
-  - Real pipeline: normalize, paragraph chunking with overlap (unit
-    tested), local lexical hashing embeddings (deterministic, normalized,
-    related text ranks higher than unrelated, unit tested), tenant scoped
-    cosine search, keyword overlap rerank, grounded generation through the
-    `knowledge_answer` v1 prompt with schema validated citations.
-  - Honest edges: unchanged content re-ingest is idempotent; changed
-    content creates version N+1 and supersedes the old one; a question
-    with no relevant sources declines without calling the LLM at all; org
-    B cannot retrieve org A documents (all integration tested).
-  - API `/api/v1/knowledge`: documents list (org members), ingest
-    (ops_admin only), ask (grounded answer plus citations with used
-    flags). Seed now ingests three fictional resource documents.
-  - Student surface at `/resources`: ask box, answer in the AIFrame with
-    the sources row (cited vs retrieved but not cited), library list.
-    Resources is now a live link in the chat rail.
-
-- 2026-08-10, school and guardian surfaces (P9), validated by
-  `./scripts/verify.sh` and a browser walk of the full loop (school stepper
-  submit, therapist accept plus share update, guardian portal shows the
-  notification and the update; zero console errors, screenshots reviewed):
-  - Referral workflow (states submitted, accepted, declined; enum value
-    added by migration `840af87195a6`, tables by `6245b76ab2c3`). School
-    staff see a names only roster and their own referrals' states, nothing
-    clinical (tested). Consent confirmation is required to submit.
-    Accepting a referral assigns the deciding therapist to the patient and
-    notifies linked guardians. Terminal workflows refuse a second decision.
-  - Guardian portal: `guardian_links` gates everything. Guardians see care
-    updates deliberately written for them by assigned therapists,
-    notifications (referral accepted, care update), and the resource
-    library; conversations, reviews, and ops all return 403 (tested).
-  - Events `ReferralSubmitted`, `ReferralDecided`, and the spec's
-    `GuardianNotificationRequired` documented in docs/EVENTS.md; payloads
-    carry ids only.
-  - Surfaces: `/school` (thread stepper per DESIGN.md 4.5, status chips
-    mirror workflow state names exactly), `/guardian` (calm card grid per
-    4.3, empty states as invitations), clinician workspace gains a
-    referrals queue and a share update form. Login routes each role to its
-    home surface. Seed adds school@ and guardian@demo.caremesh.org and the
-    guardian link to Sam.
-
-- 2026-08-10, payer workflows (P10), validated by `./scripts/verify.sh` and
-  a browser walk of the whole lifecycle (eligibility check, submit, deny
-  with reason, resubmit with note, approve, history rail inspected; zero
-  console errors, screenshots reviewed):
-  - Claim state machine: submitted, approved, denied, resubmitted
-    (approved terminal; denials require a reason, enforced and tested).
-    Tables and migration `1fd82bbb973b` (claims, eligibility_checks, plus
-    the CLAIM workflow enum value).
-  - External payer behind the labeled `fake-payer-1` adapter
-    (`# SIMULATED`, deterministic: member ids containing INELIG are not
-    covered). Eligibility results are stored with adapter name and
-    simulated flag, and claim submission requires a passing check.
-  - Role boundaries tested: therapists bill only assigned patients and see
-    only their own claims; payer staff decide but cannot submit or reach
-    clinical surfaces; patients get 403.
-  - Events `InsuranceClaimSubmitted` and `InsuranceClaimUpdated` (spec
-    names) documented in docs/EVENTS.md.
-  - Surfaces: `/billing` (therapist: eligibility, submit, rework denials)
-    and `/payer` (claims table in mono with state chips, denied only
-    filter, required denial reason, expandable actor attributed history
-    rail per DESIGN.md 4.6). Seed adds payer@demo.caremesh.org.
-
-- 2026-08-10, observability (P12), validated by `./scripts/verify.sh`, a
-  live Prometheus query (9 HTTP requests and 3 AI requests scraped through
-  the full pipeline), and a reviewed Grafana screenshot showing live data,
-  including the outbox gauge correctly reporting 14 waiting events while
-  the relay was off:
-  - Prometheus metrics on the API at `/metrics`: HTTP counters and latency
-    histogram (paths normalized to bound cardinality, tested), AI gateway
-    counters (per prompt, status, simulated) with token and cost totals
-    incremented where every call is already audited, and DB backed gauges
-    (workflows by state, review queue depth, outbox unpublished) refreshed
-    every 15s by a lifespan task.
-  - Compose `observability` profile (off by default): Prometheus scraping
-    the host API, Grafana provisioned from the repo with the CareMesh
-    overview dashboard in the product palette (no blue).
-  - Honest deferrals documented in docs/OBSERVABILITY.md: worker processes
-    have no metrics port yet (their AI calls are audited in ai_requests
-    but not counted), tracing stays correlation id based, alert rules come
-    with deployment.
-
-- 2026-08-10, eval expansion (P13), validated by `./scripts/verify.sh`
-  (now gating all three suites at 100 percent, 17/17):
-  - `dira-v1` (6 cases): safety as testable properties of real gateway
-    replies: global bans (therapist claims, diagnosing, prescribing),
-    crisis replies must point to crisis resources without claiming
-    autonomous action, non crisis messages must not get alarming replies,
-    injection attempts must not extract a human therapist claim.
-  - `retrieval-v1` (4 cases): hit@1, hit@3, and MRR over the real pgvector
-    search and rerank in an isolated throwaway org in the test database
-    (cleaned up after), plus an off domain query that must retrieve
-    nothing. All 1.0 on the lexical embeddings; the dataset reruns
-    unchanged when a semantic provider is enabled.
-  - risk suite now reports escalation precision and recall (1.0 / 1.0).
-  - The report (`backend/evals/results/latest.json`) carries per case
-    outcomes plus usage measured from the gateway audit entries: average
-    latency, tokens, cost (0), and a simulated only flag. Documented in
-    docs/EVALUATION.md, including the HumanReviewCompleted feedback loop
-    noted as future work.
-
-- 2026-08-10, security hardening (P14), validated by `./scripts/verify.sh`:
-  - Rate limiting backed by Redis (its first and only documented use,
-    justified in `app/infrastructure/rate_limit.py`): login attempts per
-    client address and target account (5/minute default), AI bearing
-    endpoints per user (20/minute default), 429 problem details with
-    Retry-After. Migration `988a3b6bf521` adds `audit_logs`.
-  - Append only audit trail written in its own transaction so it survives
-    request rollbacks: login_success, login_failed (masked email only,
-    tested that the full address never appears), review_decided,
-    claim_decided, event_republished.
-  - docs/SECURITY.md (existing controls, deliberate limitations like
-    localStorage tokens, and what a real deployment would need) and
-    docs/THREAT_MODEL.md (assets, boundaries, threats with mitigations or
-    explicit gaps, and the safety failure mode analysis).
-  - Test note: conftest raises LOGIN_ATTEMPTS_PER_MINUTE via env because
-    fixtures log in constantly; the lockout test seeds limiter state
-    directly and asserts the 429 path.
-
-## In flight
-
-- Nothing. The audit phase closed cleanly, working tree committed.
-
-## Known limitations (documented, not scheduled)
-
-- Frontend tokens live in localStorage; the documented fix is httpOnly
-  cookies behind Next.js route handlers.
-- Message creation has no idempotency key; a client retry after a
-  network failure can duplicate a message and a model call.
-- Lists paginate by offset; keyset pagination on the UUIDv7 ids is the
-  documented upgrade.
+- Frontend tokens live in localStorage; httpOnly cookies behind Next.js
+  route handlers are the documented fix.
+- Message creation has no idempotency key; a client retry after a network
+  failure can duplicate a message and a model call.
+- Lists paginate by offset.
 - Audit rows for successful decisions are written before the business
-  transaction commits (deliberate for failures, imperfect for successes).
+  transaction commits.
 - Evals run on the fake provider only; a labeled dataset and a real model
-  run are the first things a budget would buy (docs/EVALUATION.md).
-- Five high severity npm advisories remain in eslint-config-next's
+  run are the next step (`EVALUATION.md`).
+- Five high severity npm advisories remain in `eslint-config-next`'s
   transitive lint tooling (dev only, no non major fix available).
-- The remaining items in docs/CODEBASE_AUDIT.md section "Remaining
-  issues" are the backlog.
 
-## Next steps (pick with the human)
+## Next steps
 
-The standout plan in the session notes: a labeled risk dataset and a
-real model evaluation run, true hybrid retrieval (BM25 plus dense), a
-runtime output guardrail for Dira, httpOnly cookies, and a public demo
-deployment with the fake provider.
+A labeled risk dataset and a real model evaluation run, hybrid retrieval
+(BM25 plus dense), a runtime output guardrail for Dira, httpOnly cookies,
+and a public demo deployment on the fake provider.
 
-## Notes for the next session
+## Standing constraints
 
-- Dev workers run on the host (commands in CLAUDE.md) or in containers
-  through the compose `app` profile.
-- Run `./scripts/verify.sh` before declaring anything done; it now
-  includes mypy and the coverage floor.
-
-## Standing constraints from the human (2026-08-10)
-
-- **Zero budget:** everything must run free and locally. Flag it explicitly
-  before any external or paid service is ever needed. Real LLM API calls are
-  the only anticipated exception and stay off unless switched on by env var.
-- The machine may struggle with heavy services, so Redpanda instead of Kafka,
-  compose profiles, and the observability stack off by default.
-- **Writing rules:** commits must never carry Claude attribution of any kind,
-  so Claude never appears as a contributor on GitHub. All writing uses simple
-  language with no em dashes and no dashes as punctuation.
+- Zero budget: everything runs free and locally. Real LLM API calls are
+  the only anticipated cost and stay off unless switched on by env var,
+  flagged before use.
+- The development machine is a laptop: Redpanda instead of Kafka, compose
+  profiles, the observability stack off by default.
+- Writing uses simple language with no em dashes and no dashes as
+  punctuation. Commits carry no AI attribution.
+- Dev workers run on the host (commands in `CLAUDE.md`) or in containers
+  through the compose `app` profile. Run `./scripts/verify.sh` before
+  declaring anything done.

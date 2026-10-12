@@ -1,12 +1,12 @@
 # CLAUDE.md: CareMesh AI
 
-> This file is Claude's persistent memory for this repository. Read it at the start of every session, **then read `docs/PROGRESS.md`** before doing anything else. Keep both files accurate. Future sessions depend on them, not on conversation history.
+> This file is the coding agent's persistent memory for this repository. Read it at the start of every session, **then read `docs/PROGRESS.md`** before doing anything else. Keep both files accurate. Future sessions depend on them, not on conversation history.
 
 ## What this project is
 
 CareMesh AI is a **portfolio project** simulating an AI native youth mental health platform. Full specification: `docs/BUILD_SPEC.md` (the v2 build spec). It is **not a real healthcare product**.
 
-Honesty rules that must never be broken (repeated here because they carry weight):
+Rules that must never be broken (repeated here because they carry weight):
 - Never claim HIPAA compliance, clinical validity, or readiness for real patients, anywhere, including README copy and UI text.
 - Never present mocks, hardcoded AI output, or static dashboards as real. Mocks live behind interfaces, are clearly labeled `# SIMULATED`, and have a documented replacement path.
 - Never report anything complete without running its validation. Docs describe reality only.
@@ -29,11 +29,9 @@ Honesty rules that must never be broken (repeated here because they carry weight
 - **Dira:** patient messages get a synchronous reply through the gateway (ADR 0005), persisted as a `dira` message with `ai_request_id` and `simulated` provenance columns, `AIResponseGenerated` emitted to the outbox, SIMULATED chip rendered in the chat
 - **AI:** all LLM calls go through `AIGateway` (`app/application/ai/gateway.py`): prompt registry with versions, structured output validation with bounded retry, timeout, and every call logged to `ai_requests` with the simulated flag. Provider chosen by `LLM_PROVIDER` env var; `fake` is the default (deterministic scenarios, `# SIMULATED`, injectable failures via `[[fail:timeout|malformed|error]]` markers)
 - **Events:** outbox in `domain_event_log`, relay worker, idempotent consumer with DLQ. See `docs/EVENTS.md`. Workers run on the host in dev: `uv run python -m app.workers.relay` and `uv run python -m app.workers.conversation_consumer`
-- **Approved through:** Phase 0 was explicitly approved by the human on 2026-08-10 ("start")
 - **Working end to end:** compose stack (Postgres 5433, Redis, Redpanda), auth with JWT and rotating refresh tokens, RBAC plus resource level authorization, conversation and message CRUD, and the Next.js student app (welcome, login, chat) styled per `docs/DESIGN.md` with OpenAPI generated types. Backend 32 tests plus frontend 9 tests green through `./scripts/verify.sh`; browser flow smoke tested with Playwright
 - **Design:** `docs/DESIGN.md` is the authoritative design reference for all frontend work. Tokens live in `frontend/src/styles/tokens.css`. Gold is reserved for AI provenance; no blue anywhere
-- **Priority path:** vertical slice first (Student, Dira, risk signal, clinician workspace, ops console) before broadening to the school, guardian, and payer surfaces. See roadmap S1 to S7 in the proposal, section 11
-- **Key decisions, approved with Phase 0 and recorded as ADRs 0001 to 0004:** Redpanda as the broker speaking the Kafka API, the fake LLM provider as the dev default with real providers switched on only by the `LLM_PROVIDER` env var, the outbox pattern for events, and a small workflow engine inside the repo
+- **Key decisions, recorded as ADRs 0001 to 0007:** Redpanda as the broker speaking the Kafka API, the fake LLM provider as the dev default with real providers switched on only by the `LLM_PROVIDER` env var, the outbox pattern for events, a small workflow engine inside the repo, synchronous Dira replies, pgvector with swappable embeddings, and the tool calling design
 - **Budget constraint, standing:** everything free and local. Real LLM API usage is the only permitted future cost and must be flagged to the human before use
 
 ## Architecture summary
@@ -49,7 +47,7 @@ Honesty rules that must never be broken (repeated here because they carry weight
 ```
 backend/          FastAPI app (api/ application/ domain/ infrastructure/ workers/ evals/)
 frontend/         Next.js app (src/app src/components src/lib e2e/)
-docs/             BUILD_SPEC.md, PROGRESS.md, PHASE_0_PROPOSAL.md, DESIGN.md, EVENTS.md, adr/
+docs/             BUILD_SPEC.md, PROGRESS.md, DESIGN.md, CODEBASE_AUDIT.md, the per topic docs, adr/
 docker/           postgres init scripts (compose file lives at the repo root)
 scripts/          verify.sh (phase gate), e2e.sh (browser journey), gen-api-types.sh, seed via backend/scripts
 ```
@@ -93,7 +91,7 @@ uv run python -m evals.run --dataset all
 - **Auth:** authorization enforced in the application layer, at the resource level, least privilege. Never rely on frontend hiding alone.
 - **Errors:** consistent problem details error responses; no bare 500s for expected failures.
 - **Git:** conventional commits (`feat:`, `fix:`, `docs:`, `refactor:`, `test:`); commit each coherent increment; never end a session with a broken repo (if unavoidable, record it in PROGRESS.md).
-- **Attribution:** never add Claude attribution of any kind to commits, PR bodies, or docs. No Co-Authored-By trailers. Claude must not appear as a contributor on GitHub.
+- **Attribution:** never add AI attribution of any kind to commits, PR bodies, or docs. No Co-Authored-By trailers. No AI tool may appear as a contributor on GitHub.
 - **Writing style:** simple language everywhere (docs, commits, UI copy). No em dashes and no dashes used as punctuation. Hyphens stay only where syntax requires them: file names, URLs, CLI flags, and code identifiers.
 - **Decisions:** every significant choice, including defaults chosen without asking, gets an ADR in `docs/adr/` (`NNNN-title.md`).
 - **Secrets:** `.env` (gitignored) + `.env.example` kept current. Never commit keys. Never log message content, tokens, or fields that look like PII.
@@ -116,4 +114,4 @@ uv run python -m evals.run --dataset all
 2. Confirm the current phase and its exit criteria before writing code.
 3. Work in small validated increments; run relevant tests as you go.
 4. Before ending: commit, run `./scripts/verify.sh` if code changed, update `docs/PROGRESS.md` (and this file if architecture, conventions, or commands changed).
-5. Never skip a phase gate or start a new phase without the approval noted in "Current state".
+5. Never skip a phase gate or start a new phase without the human's approval.
