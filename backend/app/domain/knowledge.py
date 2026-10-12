@@ -63,26 +63,38 @@ def normalize_text(text: str) -> str:
 
 def chunk_text(text: str, max_chars: int = 800, overlap_chars: int = 120) -> list[str]:
     """Splits on paragraph boundaries, packing paragraphs into chunks up to
-    max_chars, with a tail overlap so context is not lost at boundaries."""
+    max_chars, with a tail overlap so context is not lost at boundaries.
+    Invariant: no chunk is longer than max_chars."""
+    if max_chars <= 0 or overlap_chars < 0 or overlap_chars >= max_chars:
+        raise ValueError("chunk_text needs 0 <= overlap_chars < max_chars")
     normalized = normalize_text(text)
     if not normalized:
         return []
     paragraphs = [p for p in normalized.split("\n") if p]
     chunks: list[str] = []
     current = ""
+    stride = max_chars - overlap_chars
     for paragraph in paragraphs:
-        candidate = f"{current}\n{paragraph}".strip() if current else paragraph
+        if len(paragraph) > max_chars:
+            # A single paragraph longer than max_chars is windowed on its
+            # own; whatever was buffered closes first so the limit holds.
+            if current:
+                chunks.append(current)
+                current = ""
+            for start in range(0, len(paragraph), stride):
+                chunks.append(paragraph[start : start + max_chars])
+                if start + max_chars >= len(paragraph):
+                    break
+            continue
+        candidate = f"{current}\n{paragraph}" if current else paragraph
         if len(candidate) <= max_chars:
             current = candidate
             continue
-        if current:
-            chunks.append(current)
-            current = current[-overlap_chars:] + "\n" + paragraph
-        else:
-            # A single paragraph longer than max_chars is split hard.
-            for start in range(0, len(paragraph), max_chars - overlap_chars):
-                chunks.append(paragraph[start : start + max_chars])
-            current = ""
+        chunks.append(current)
+        tail = current[-overlap_chars:] if overlap_chars else ""
+        carried = f"{tail}\n{paragraph}" if tail else paragraph
+        # Drop the overlap when even that would not fit.
+        current = carried if len(carried) <= max_chars else paragraph
     if current:
         chunks.append(current)
     return chunks

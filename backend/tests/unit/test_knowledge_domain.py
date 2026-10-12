@@ -74,3 +74,23 @@ def test_rerank_prefers_keyword_matches_on_close_scores():
     off_topic = _retrieved("completely different subject entirely", 0.55)
     ranked = rerank("grounding techniques for anxious moments", [off_topic, on_topic])
     assert ranked[0].chunk.content.startswith("grounding")
+
+
+def test_no_chunk_ever_exceeds_the_limit():
+    """A long paragraph arriving while text is buffered used to ride along
+    with the overlap tail and produce an oversized chunk."""
+    text = "\n\n".join(["a" * 500, "x" * 2000, "b" * 300, "c" * 700, "d" * 790])
+    chunks = chunk_text(text, max_chars=800, overlap_chars=120)
+    assert chunks, "content must not be lost"
+    assert all(len(c) <= 800 for c in chunks), [len(c) for c in chunks]
+    # Nothing disappears: every paragraph's text is present somewhere.
+    joined = "".join(chunks)
+    for letter in "abcd":
+        assert letter * 300 in joined
+
+
+def test_chunk_text_rejects_impossible_overlap():
+    import pytest
+
+    with pytest.raises(ValueError):
+        chunk_text("hello", max_chars=100, overlap_chars=100)
