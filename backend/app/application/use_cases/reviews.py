@@ -44,19 +44,15 @@ class ReviewService:
         if not patient_ids:
             return []
         pending = await self._workflows.list_pending_risk(actor.organization_id, patient_ids)
-        items: list[ReviewQueueItem] = []
-        for workflow, signal in pending:
-            patient = await self._users.get_by_id(signal.patient_id)
-            message = await self._messages.get_by_id(signal.message_id)
-            items.append(
-                ReviewQueueItem(
-                    workflow_id=workflow.id,
-                    signal=signal,
-                    patient_name=patient.display_name if patient else "Unknown",
-                    message_content=message.content if message else "",
-                )
+        return [
+            ReviewQueueItem(
+                workflow_id=workflow.id,
+                signal=signal,
+                patient_name=patient_name,
+                message_content=message_content,
             )
-        return items
+            for workflow, signal, patient_name, message_content in pending
+        ]
 
     async def decide(
         self,

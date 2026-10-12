@@ -1,5 +1,6 @@
 """H2: Dira's tool loop and the streaming endpoint."""
 
+import asyncio
 import json
 
 import pytest
@@ -244,3 +245,24 @@ async def test_streamed_reply_is_generated_exactly_once(client, app, seeded, aut
     events = await stream("can I get an appointment please")
     assert any(e["type"] == "tool" for e in events) and events[-1]["type"] == "message"
     assert (counting.streams, counting.completes) == (3, 0)
+
+
+async def test_concurrent_appointment_asks_create_one_request(client, app, seeded, auth_header):
+    """Two turns on one conversation ask at the same moment. The check is
+    in one transaction and the insert in another, so without a lock both
+    would pass; the advisory lock serializes them."""
+    patient = await auth_header("patient@a.caremesh.org")
+    conversation_id = await start_conversation(client, patient)
+    body = {"content": "can you schedule an appointment for me?"}
+    responses = await asyncio.gather(
+        client.post(
+            f"/api/v1/conversations/{conversation_id}/messages", json=body, headers=patient
+        ),
+        client.post(
+            f"/api/v1/conversations/{conversation_id}/messages", json=body, headers=patient
+        ),
+    )
+    assert [r.status_code for r in responses] == [201, 201]
+    async with app.state.session_factory() as session:
+        requests = (await session.scalars(select(AppointmentRequestRow))).all()
+    assert len(requests) == 1

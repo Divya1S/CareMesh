@@ -405,3 +405,55 @@ async def test_concurrent_decisions_resolve_to_one_winner_and_one_conflict(
     assert len(reviews) == 1
     assert [t.to_state for t in transitions] == ["pending_review", "resolved"]
     assert len(audits) == 1, "the losing decision must not be audited as if it happened"
+
+
+async def test_review_queue_runs_a_fixed_number_of_queries(client, app, seeded, auth_header):
+    """The queue used to fetch the patient and the message per item. With
+    several items it must still be one query for the list, not one per
+    row."""
+    from sqlalchemy import event
+
+    headers = await auth_header("patient@a.caremesh.org")
+    conversation = (
+        await client.post("/api/v1/conversations", json={"title": "t"}, headers=headers)
+    ).json()
+    for text in ("I want to hurt myself", "I keep thinking about suicide", "end my life"):
+        await client.post(
+            f"/api/v1/conversations/{conversation['id']}/messages",
+            json={"content": text},
+            headers=headers,
+        )
+        async with app.state.session_factory() as session:
+            row = await session.scalar(
+                select(DomainEventLogRow)
+                .where(DomainEventLogRow.event_type == PATIENT_MESSAGE_CREATED)
+                .order_by(DomainEventLogRow.id.desc())
+            )
+        envelope = EventEnvelope(
+            event_id=row.id,
+            event_type=row.event_type,
+            schema_version=row.schema_version,
+            occurred_at=row.occurred_at,
+            organization_id=row.organization_id,
+            correlation_id=row.correlation_id,
+            causation_id=row.causation_id,
+            payload=row.payload,
+        )
+        assert await run_consumer(app, envelope) == "processed"
+    therapist = await auth_header("therapist@a.caremesh.org")
+
+    statements: list[str] = []
+
+    def record(conn, cursor, statement, parameters, context, executemany):
+        if statement.lstrip().upper().startswith("SELECT"):
+            statements.append(statement)
+
+    sync_engine = app.state.engine.sync_engine
+    event.listen(sync_engine, "before_cursor_execute", record)
+    try:
+        queue = (await client.get("/api/v1/reviews", headers=therapist)).json()
+    finally:
+        event.remove(sync_engine, "before_cursor_execute", record)
+    assert len(queue) == 3
+    # Current user, assignments, and the joined queue query.
+    assert len(statements) <= 3, statements

@@ -3,7 +3,7 @@
 from datetime import UTC, datetime
 from uuid import UUID
 
-from sqlalchemy import select, update
+from sqlalchemy import select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.application.ai.types import AIRequestLogEntry
@@ -599,11 +599,15 @@ class SqlWorkflowRepository:
         ]
 
     async def list_pending_risk(
-        self, organization_id: UUID, patient_ids: list[UUID]
-    ) -> list[tuple[WorkflowInstance, RiskSignal]]:
+        self, organization_id: UUID, patient_ids: list[UUID], limit: int = 100
+    ) -> list[tuple[WorkflowInstance, RiskSignal, str, str]]:
+        """Pending escalations with the patient's name and the flagged
+        message in one query (the queue used to fetch both per row)."""
         rows = await self._session.execute(
-            select(WorkflowInstanceRow, RiskSignalRow)
+            select(WorkflowInstanceRow, RiskSignalRow, UserRow.display_name, MessageRow.content)
             .join(RiskSignalRow, WorkflowInstanceRow.subject_id == RiskSignalRow.id)
+            .join(UserRow, RiskSignalRow.patient_id == UserRow.id)
+            .join(MessageRow, RiskSignalRow.message_id == MessageRow.id)
             .where(
                 WorkflowInstanceRow.organization_id == organization_id,
                 WorkflowInstanceRow.workflow_type == WorkflowType.RISK_ESCALATION,
@@ -611,9 +615,10 @@ class SqlWorkflowRepository:
                 RiskSignalRow.patient_id.in_(patient_ids),
             )
             .order_by(RiskSignalRow.severity.desc(), WorkflowInstanceRow.created_at.asc())
+            .limit(limit)
         )
         result = []
-        for workflow_row, signal_row in rows:
+        for workflow_row, signal_row, patient_name, message_content in rows:
             result.append(
                 (
                     WorkflowInstance(
@@ -627,6 +632,8 @@ class SqlWorkflowRepository:
                         updated_at=workflow_row.updated_at,
                     ),
                     _risk_signal(signal_row),
+                    patient_name,
+                    message_content,
                 )
             )
         return result
@@ -1108,7 +1115,14 @@ class SqlAppointmentRepository:
 
     async def has_open_for_conversation(self, conversation_id: UUID, state: str) -> bool:
         """Idempotency guard for Dira's request_appointment tool: one open
-        request per conversation, no matter how many times a model asks."""
+        request per conversation, no matter how many times a model asks.
+        The state lives in another table, so no unique index can enforce
+        it; a transaction scoped advisory lock on the conversation makes
+        the check and the insert that follows atomic across requests."""
+        await self._session.execute(
+            text("SELECT pg_advisory_xact_lock(hashtext(:key))"),
+            {"key": f"appointment:{conversation_id}"},
+        )
         row = await self._session.scalar(
             select(AppointmentRequestRow.id)
             .join(

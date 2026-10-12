@@ -213,7 +213,11 @@ class RiskReviewRow(Base):
 
 class WorkflowInstanceRow(Base):
     __tablename__ = "workflow_instances"
-    __table_args__ = (Index("ix_workflow_instances_org_state", "organization_id", "state"),)
+    __table_args__ = (
+        Index("ix_workflow_instances_org_state", "organization_id", "state"),
+        # The review queue joins subject_id to risk_signals.id.
+        Index("ix_workflow_instances_subject", "subject_id"),
+    )
 
     id: Mapped[UUID] = _uuid_pk()
     organization_id: Mapped[UUID] = mapped_column(ForeignKey("organizations.id"), nullable=False)
@@ -421,6 +425,8 @@ class AppointmentRequestRow(Base):
     the patient's behalf. State lives in workflow_instances."""
 
     __tablename__ = "appointment_requests"
+    # The idempotency check filters on the conversation.
+    __table_args__ = (Index("ix_appointment_requests_conversation", "conversation_id"),)
 
     id: Mapped[UUID] = _uuid_pk()
     organization_id: Mapped[UUID] = mapped_column(ForeignKey("organizations.id"), nullable=False)
