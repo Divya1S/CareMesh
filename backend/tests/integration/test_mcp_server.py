@@ -1,7 +1,7 @@
 """MCP server round trip: a real MCP client (in memory transport, same
 protocol as stdio) lists the tools and calls both against the test
-database. Proves the server an external MCP client like Claude connects
-to actually works, without subprocesses."""
+database. Proves the server an external MCP client connects to works,
+without subprocesses."""
 
 import pytest
 from mcp.client.client import Client

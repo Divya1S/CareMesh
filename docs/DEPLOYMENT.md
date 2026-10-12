@@ -21,7 +21,7 @@
 
 ## Paper target: GCP
 
-Chosen for the proposal because Cloud Run's scale to zero keeps a demo
+Chosen because Cloud Run's scale to zero keeps a demo
 deployment near free. The equivalent AWS mapping (App Runner or ECS,
 RDS, ElastiCache, MSK) would work the same way.
 
@@ -50,5 +50,5 @@ Recorded honestly, since none of it is done:
    limiter buckets on the client address, `METRICS_TOKEN` so the metrics
    port can be exposed to the scraper, and pool sizes tuned to the
    instance count.
-7. And the honesty rule above all of it: this is a portfolio simulation;
+7. And above all of it: this is a portfolio simulation;
    nothing here is validated for real patients or real clinical data.

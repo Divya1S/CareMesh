@@ -207,8 +207,8 @@ someone else: every modified path traced through its callers, and every
 suspicion turned into an experiment. What that found, all fixed and
 tested:
 
-1. **The cancelled audit status never landed on a real server (confirmed
-   defect in my own fix).** The original test closed the generator with
+1. **The cancelled audit status never landed on a real server (a
+   confirmed defect in the audit's own fix).** The original test closed the generator with
    `aclose()`, which does not reproduce what Starlette does on a client
    disconnect: it cancels the response task through an anyio cancel
    scope, which re cancels every later await in that task, including the
@@ -301,5 +301,5 @@ patients; nothing below changes that.
 | Deployment readiness | Not deployed; paper design | Containers and compose profile exist; DEPLOYMENT.md lists what a real deployment still needs |
 
 Confidence: high on correctness within the tested paths, because every
-claim above is backed by a test run in this audit; medium on behavior
+claim above is backed by a test run during the audit; medium on behavior
 under real provider latency and real load, which was not exercised.

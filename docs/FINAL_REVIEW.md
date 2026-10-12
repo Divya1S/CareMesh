@@ -122,11 +122,11 @@ than fixed, with reasons:
 ## Verdict
 
 The exit criteria in the build spec hold: coherent architecture, real
-end to end workflows, genuinely integrated AI with explicit boundaries
+end to end workflows, integrated AI with explicit boundaries
 and provenance, real RAG, event driven recovery, enforced idempotency
 and authorization, observability and gated evals, tested critical
 workflows, implemented security controls, docs that describe reality,
-and reproducible local dev. The honesty rules survived the review:
+and reproducible local dev. The scope rules survived the review:
 nothing simulated is presented as real, and the one place the
 distinction was asserted rather than derived (the streaming badge) is
 now data driven.

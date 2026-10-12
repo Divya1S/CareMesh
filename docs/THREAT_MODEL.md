@@ -24,17 +24,17 @@ layer.
 |---|---|---|
 | Credential stuffing / brute force | Argon2id, per address and account login rate limit, timing equalized lookups, audit of failures with masked emails | No MFA, no breach password checks |
 | Stolen refresh token replay | Single use rotating refresh tokens in families: a replayed token is rejected, revokes every session in its family (the thief's new chain included), and is audited; a concurrent double use lets exactly one win | Tokens in localStorage until the cookie refactor |
-| Horizontal privilege escalation (patient reads another patient) | Resource level checks in every use case; tested per surface | — |
+| Horizontal privilege escalation (patient reads another patient) | Resource level checks in every use case; tested per surface | none |
 | Cross tenant data access | organization_id scoping in every query; cross tenant reads return 404; tested | Single database, no row level security as defense in depth |
-| School or guardian overreach | Structural least privilege: roster is names only, guardians see only linked and explicitly shared items; both tested | — |
+| School or guardian overreach | Structural least privilege: roster is names only, guardians see only linked and explicitly shared items; both tested | none |
 | Prompt injection via patient messages | The AI never makes decisions: escalation is deterministic code over structured output and the crisis phrase floor runs before the model; schema validation rejects malformed output; tool arguments are schema checked before a handler runs; injection cases are regression tested in evals | A real LLM could still be steered in wording; no runtime output filter yet |
-| AI cost or resource abuse | Per user rate limit on AI endpoints; every call audited with tokens and cost; fake provider costs nothing | — |
+| AI cost or resource abuse | Per user rate limit on AI endpoints; every call audited with tokens and cost; fake provider costs nothing | none |
 | Malicious or malformed events on the broker | Consumers validate envelopes, are idempotent by event id, and dead letter poison messages after bounded retries | Broker has no authentication in local dev |
 | Tampering with audit or event history | Both tables are append only by convention and code path | No cryptographic chaining; DB admin could rewrite |
-| Sensitive data in logs or metrics | No content in logs, id only event payloads, normalized metric labels, truncated DLQ previews; tested for metrics labels | — |
+| Sensitive data in logs or metrics | No content in logs, id only event payloads, normalized metric labels, truncated DLQ previews; tested for metrics labels | none |
 | Denial of service | Rate limits on the expensive paths, bounded page sizes, timeouts on AI calls, model calls never hold a database connection | No global request limiter or WAF |
 | Rate limiter store outage | Explicit policy: login fails closed with a 503, AI endpoints fail open; both logged and counted | An attacker who can reach Redis can still disable login |
-| Lost update on a workflow decision | Compare and swap transitions; the loser gets a 409 and no audit row | — |
+| Lost update on a workflow decision | Compare and swap transitions; the loser gets a 409 and no audit row | none |
 | MCP client overreach | stdio only (no network listener, inherits local user trust), an allow list of two read only tools, hard scope to one organization, counts and library excerpts only, never conversation content | No per tool authentication; acceptable because the transport is local and read only |
 
 ## Failure modes (safety analysis)

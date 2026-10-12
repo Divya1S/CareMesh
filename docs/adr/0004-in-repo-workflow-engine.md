@@ -24,7 +24,7 @@ reason, and correlation ID.
 
 ## Consequences
 
-- We own retry and timeout logic, which is the point of the exercise.
+- We own retry and timeout logic, which is what this project sets out to show.
 - Scope risk: the engine stays minimal (states, transitions, retries, history)
   and gains features only when a concrete workflow needs them, gated by a new ADR.
 

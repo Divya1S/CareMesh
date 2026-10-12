@@ -1,4 +1,4 @@
-"""CareMesh MCP server: read only tools for an MCP client such as Claude.
+"""CareMesh MCP server: read only tools for any MCP client.
 
 Runs over stdio, so it inherits the trust of whoever launched it on this
 machine; there is no network listener. Security choices, deliberately

@@ -4,8 +4,8 @@ Status: accepted (approved with Phase 0, 2026-08-10)
 
 ## Context
 
-The LLM API budget is limited and local dev must be free. The project honesty
-rules forbid presenting simulated AI as real. All LLM traffic goes through the
+The LLM API budget is limited and local dev must be free. The project rules
+forbid presenting simulated AI as real. All LLM traffic goes through the
 AI Gateway behind an `LLMProvider` abstraction.
 
 ## Decision
