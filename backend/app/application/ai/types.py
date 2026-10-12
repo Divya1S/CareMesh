@@ -7,11 +7,21 @@ from pydantic import BaseModel
 
 
 @dataclass(frozen=True, slots=True)
+class ToolCall:
+    id: str
+    name: str
+    arguments: dict
+
+
+@dataclass(frozen=True, slots=True)
 class LLMMessage:
     role: Literal["system", "user", "assistant", "tool"]
     content: str
     # Set on role="tool" messages: which call this result answers.
     tool_call_id: str | None = None
+    # Set on role="assistant" messages that asked for tools, so the
+    # transcript the model sees is faithful: its own call, then the result.
+    tool_calls: list[ToolCall] = field(default_factory=list)
 
 
 @dataclass(frozen=True, slots=True)
@@ -22,13 +32,6 @@ class ToolDef:
     name: str
     description: str
     parameters: dict  # JSON schema for the arguments
-
-
-@dataclass(frozen=True, slots=True)
-class ToolCall:
-    id: str
-    name: str
-    arguments: dict
 
 
 @dataclass(frozen=True, slots=True)
@@ -53,6 +56,16 @@ class LLMResponse:
     simulated: bool
     # Nonempty when the model wants tools run before answering.
     tool_calls: list[ToolCall] = field(default_factory=list)
+    # The provider's stop reason when it reports one (MAX_TOKENS, SAFETY).
+    finish_reason: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class StreamDelta:
+    """One streamed piece of text. A provider stream yields deltas and then
+    exactly one LLMResponse carrying the full text, tool calls, and usage."""
+
+    text: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -84,6 +97,8 @@ class AIErrors:
     provider_error: str = "provider_error"
     validation_failed: str = "validation_failed"
     timeout: str = "timeout"
+    # The client went away mid stream; nothing was persisted.
+    cancelled: str = "cancelled"
     ok: str = "ok"
 
 

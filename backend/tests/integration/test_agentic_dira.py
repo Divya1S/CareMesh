@@ -183,3 +183,64 @@ async def test_hostile_request_id_is_replaced_not_stored(client, seeded, auth_he
     echoed = response.headers.get("x-request-id", "")
     assert echoed != hostile
     assert len(echoed) <= 64
+
+
+class CountingProvider:
+    """Wraps the fake provider and counts provider calls."""
+
+    name = "fake"
+    model_name = "fake-sim-1"
+    simulated = True
+
+    def __init__(self) -> None:
+        from app.infrastructure.ai.fake_provider import FakeLLMProvider
+
+        self.inner = FakeLLMProvider()
+        self.completes = 0
+        self.streams = 0
+
+    async def complete(self, request):
+        self.completes += 1
+        return await self.inner.complete(request)
+
+    async def stream(self, request):
+        self.streams += 1
+        async for item in self.inner.stream(request):
+            yield item
+
+
+async def test_streamed_reply_is_generated_exactly_once(client, app, seeded, auth_header):
+    """The old path called complete() to look for tool calls, discarded
+    that answer, then streamed a second generation. Now every round streams
+    from the first call: one provider call without tools, two with one
+    tool round, and never a non streaming call on this path."""
+    from app.application.ai.gateway import AIGateway
+    from app.infrastructure.repositories import SqlAIRequestLog
+
+    counting = CountingProvider()
+    app.state.gateway = AIGateway(
+        counting, SqlAIRequestLog(app.state.audit_session_factory), timeout_seconds=5.0
+    )
+    patient = await auth_header("patient@a.caremesh.org")
+    conversation_id = await start_conversation(client, patient)
+
+    async def stream(content: str) -> list[dict]:
+        events = []
+        async with client.stream(
+            "POST",
+            f"/api/v1/conversations/{conversation_id}/messages/stream",
+            json={"content": content},
+            headers=patient,
+        ) as response:
+            async for line in response.aiter_lines():
+                if line.startswith("data: "):
+                    events.append(json.loads(line[6:]))
+        return events
+
+    events = await stream("I have been feeling sad")
+    assert events[-1]["type"] == "message"
+    assert (counting.streams, counting.completes) == (1, 0)
+
+    events = await stream("can I get an appointment please")
+    assert any(e["type"] == "tool" for e in events) and events[-1]["type"] == "message"
+    assert (counting.streams, counting.completes) == (3, 0)

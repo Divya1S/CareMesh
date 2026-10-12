@@ -8,7 +8,8 @@ adapter name and provide LLM_API_KEY; the interface is identical.
 
 Behavior is deterministic and scenario driven so tests, evals, and demos
 are reproducible and free. Failure modes are injectable through markers in
-the last user message:
+any user message (so a validation retry, which appends feedback, keeps
+failing on purpose):
   [[fail:timeout]]    sleeps past any reasonable gateway timeout
   [[fail:malformed]]  returns JSON that does not match the schema
   [[fail:error]]      raises a provider error
@@ -19,7 +20,7 @@ import json
 import re
 from collections.abc import AsyncIterator
 
-from app.application.ai.types import LLMRequest, LLMResponse, ToolCall
+from app.application.ai.types import LLMRequest, LLMResponse, StreamDelta, ToolCall
 
 _SOURCE = re.compile(
     r"SOURCE \d+ \[id=([0-9a-f-]+)\] (.+?) v\d+:\n(.*?)(?=\n\nSOURCE|\Z)", re.DOTALL
@@ -171,6 +172,10 @@ def _reply_after_tools(request: LLMRequest) -> str | None:
     )
 
 
+def _has_marker(request: LLMRequest, marker: str) -> bool:
+    return any(marker in m.content for m in request.messages if m.role == "user")
+
+
 class FakeLLMProvider:
     name = "fake"
     model_name = MODEL_NAME
@@ -178,9 +183,9 @@ class FakeLLMProvider:
 
     async def complete(self, request: LLMRequest) -> LLMResponse:
         last_user = next((m.content for m in reversed(request.messages) if m.role == "user"), "")
-        if "[[fail:timeout]]" in last_user:
+        if _has_marker(request, "[[fail:timeout]]"):
             await asyncio.sleep(3600)
-        if "[[fail:error]]" in last_user:
+        if _has_marker(request, "[[fail:error]]"):
             raise FakeProviderError("injected provider failure")
 
         tool_call = _pick_tool_call(request, last_user)
@@ -212,7 +217,7 @@ class FakeLLMProvider:
 
         scenario = _match_scenario(last_user)
         if request.response_schema is not None:
-            if "[[fail:malformed]]" in last_user:
+            if _has_marker(request, "[[fail:malformed]]"):
                 text = '{"category": "not-a-category", "severity": 99}'
             elif request.prompt_name == "knowledge_answer":
                 text = _grounded_answer(last_user)
@@ -243,11 +248,14 @@ class FakeLLMProvider:
             simulated=True,
         )
 
-    async def stream_text(self, request: LLMRequest) -> AsyncIterator[str]:
-        """Streams the same deterministic reply in word chunks. A real
-        adapter yields real tokens through this same interface."""
+    async def stream(self, request: LLMRequest) -> AsyncIterator[StreamDelta | LLMResponse]:
+        """Streams the same deterministic reply in word chunks, then the
+        full response. A tool call round yields only the response, as a
+        real model that decides to call a tool emits no prose first."""
         response = await self.complete(request)
-        words = response.text.split(" ")
-        for index in range(0, len(words), 3):
-            yield " ".join(words[index : index + 3]) + " "
-            await asyncio.sleep(0.02)
+        if not response.tool_calls:
+            words = response.text.split(" ")
+            for index in range(0, len(words), 3):
+                yield StreamDelta(" ".join(words[index : index + 3]) + " ")
+                await asyncio.sleep(0.02)
+        yield response

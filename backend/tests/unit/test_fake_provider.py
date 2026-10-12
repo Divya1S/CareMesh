@@ -1,7 +1,7 @@
 import pytest
 from pydantic import BaseModel
 
-from app.application.ai.types import LLMMessage, LLMRequest
+from app.application.ai.types import LLMMessage, LLMRequest, LLMResponse, StreamDelta, ToolDef
 from app.infrastructure.ai.factory import create_provider
 from app.infrastructure.ai.fake_provider import FakeLLMProvider, FakeProviderError
 
@@ -77,3 +77,44 @@ def test_factory_defaults_and_swap():
         create_provider("anthropic")
     with pytest.raises(RuntimeError, match="Unknown"):
         create_provider("nonsense")
+
+
+async def test_stream_yields_deltas_then_the_full_response():
+    items = [item async for item in FakeLLMProvider().stream(make_request("hello"))]
+    assert isinstance(items[-1], LLMResponse)
+    assert items[:-1] and all(isinstance(item, StreamDelta) for item in items[:-1])
+    assert "".join(item.text for item in items[:-1]).strip() == items[-1].text
+
+
+async def test_stream_with_a_tool_call_yields_only_the_response():
+    tool = ToolDef(
+        name="search_resources",
+        description="search",
+        parameters={"type": "object", "properties": {"query": {"type": "string"}}},
+    )
+    request = LLMRequest(
+        messages=[LLMMessage("system", "s"), LLMMessage("user", "any tips to sleep better?")],
+        prompt_name="dira_reply",
+        prompt_version=1,
+        tools=[tool],
+    )
+    items = [item async for item in FakeLLMProvider().stream(request)]
+    assert len(items) == 1 and isinstance(items[0], LLMResponse)
+    assert items[0].tool_calls[0].name == "search_resources"
+
+
+async def test_failure_markers_apply_to_any_user_message():
+    """A validation retry appends feedback as the newest user message; the
+    injected failure must keep failing so the retry path stays testable."""
+    request = LLMRequest(
+        messages=[
+            LLMMessage("system", "s"),
+            LLMMessage("user", "x [[fail:error]]"),
+            LLMMessage("assistant", "..."),
+            LLMMessage("user", "please try again"),
+        ],
+        prompt_name="dira_reply",
+        prompt_version=1,
+    )
+    with pytest.raises(FakeProviderError):
+        await FakeLLMProvider().complete(request)

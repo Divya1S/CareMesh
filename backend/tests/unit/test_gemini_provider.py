@@ -9,7 +9,14 @@ import json
 import httpx
 import pytest
 
-from app.application.ai.types import LLMMessage, LLMRequest, ToolDef
+from app.application.ai.types import (
+    LLMMessage,
+    LLMRequest,
+    LLMResponse,
+    StreamDelta,
+    ToolCall,
+    ToolDef,
+)
 from app.infrastructure.ai.gemini_provider import GeminiProvider
 
 
@@ -26,8 +33,9 @@ def _request(**overrides) -> LLMRequest:
     return LLMRequest(**defaults)
 
 
-def _provider(handler) -> GeminiProvider:
-    return GeminiProvider(api_key="test-key", transport=httpx.MockTransport(handler))
+def _provider(handler, **options) -> GeminiProvider:
+    options.setdefault("retry_base_seconds", 0.0)
+    return GeminiProvider(api_key="test-key", transport=httpx.MockTransport(handler), **options)
 
 
 def _text_response(text: str) -> httpx.Response:
@@ -151,12 +159,16 @@ async def test_missing_key_fails_loudly() -> None:
         GeminiProvider(api_key="")
 
 
-async def test_stream_text_yields_sse_chunks() -> None:
-    def sse(payload: dict) -> str:
-        return f"data: {json.dumps(payload)}\n\n"
+def _sse(payload: dict) -> str:
+    return f"data: {json.dumps(payload)}\n\n"
 
-    body = sse({"candidates": [{"content": {"parts": [{"text": "Try a "}]}}]}) + sse(
-        {"candidates": [{"content": {"parts": [{"text": "routine."}]}}]}
+
+async def test_stream_yields_deltas_then_a_response_with_usage() -> None:
+    body = _sse({"candidates": [{"content": {"parts": [{"text": "Try a "}]}}]}) + _sse(
+        {
+            "candidates": [{"content": {"parts": [{"text": "routine."}]}, "finishReason": "STOP"}],
+            "usageMetadata": {"promptTokenCount": 7, "candidatesTokenCount": 9},
+        }
     )
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -164,5 +176,156 @@ async def test_stream_text_yields_sse_chunks() -> None:
         assert request.url.params["alt"] == "sse"
         return httpx.Response(200, content=body.encode())
 
-    chunks = [c async for c in _provider(handler).stream_text(_request())]
-    assert chunks == ["Try a ", "routine."]
+    items = [item async for item in _provider(handler).stream(_request())]
+    assert [item.text for item in items[:-1] if isinstance(item, StreamDelta)] == [
+        "Try a ",
+        "routine.",
+    ]
+    final = items[-1]
+    assert isinstance(final, LLMResponse)
+    assert final.text == "Try a routine." and final.finish_reason == "STOP"
+    assert final.input_tokens == 7 and final.output_tokens == 9
+
+
+async def test_streamed_function_call_arrives_on_the_response() -> None:
+    body = _sse(
+        {
+            "candidates": [
+                {
+                    "content": {
+                        "parts": [
+                            {
+                                "functionCall": {
+                                    "name": "search_resources",
+                                    "args": {"query": "sleep"},
+                                }
+                            }
+                        ]
+                    }
+                }
+            ]
+        }
+    )
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=body.encode())
+
+    items = [item async for item in _provider(handler).stream(_request())]
+    assert len(items) == 1 and isinstance(items[0], LLMResponse)
+    assert items[0].tool_calls == [
+        ToolCall(id="search_resources-0", name="search_resources", arguments={"query": "sleep"})
+    ]
+
+
+async def test_safety_blocked_answer_raises_instead_of_returning_empty() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={"candidates": [{"content": {"parts": []}, "finishReason": "SAFETY"}]},
+        )
+
+    with pytest.raises(RuntimeError, match="SAFETY"):
+        await _provider(handler).complete(_request())
+
+
+async def test_truncated_answer_reports_its_finish_reason() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "candidates": [
+                    {"content": {"parts": [{"text": "Try a"}]}, "finishReason": "MAX_TOKENS"}
+                ]
+            },
+        )
+
+    response = await _provider(handler).complete(_request())
+    assert response.text == "Try a" and response.finish_reason == "MAX_TOKENS"
+
+
+async def test_retryable_status_is_retried_with_backoff() -> None:
+    calls = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return httpx.Response(503, json={"error": {"message": "overloaded"}})
+        return _text_response("Second time lucky.")
+
+    response = await _provider(handler, max_retries=1).complete(_request())
+    assert response.text == "Second time lucky." and calls["n"] == 2
+
+
+async def test_retries_are_bounded() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(429, json={"error": {"message": "quota"}})
+
+    with pytest.raises(httpx.HTTPStatusError):
+        await _provider(handler, max_retries=1).complete(_request())
+
+
+async def test_parallel_calls_to_one_tool_get_distinct_ids() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "candidates": [
+                    {
+                        "content": {
+                            "parts": [
+                                {
+                                    "functionCall": {
+                                        "name": "search_resources",
+                                        "args": {"query": "a"},
+                                    }
+                                },
+                                {
+                                    "functionCall": {
+                                        "name": "search_resources",
+                                        "args": {"query": "b"},
+                                    }
+                                },
+                            ]
+                        }
+                    }
+                ]
+            },
+        )
+
+    response = await _provider(handler).complete(_request())
+    assert [c.id for c in response.tool_calls] == ["search_resources-0", "search_resources-1"]
+
+
+async def test_assistant_tool_call_turn_is_sent_with_its_real_arguments() -> None:
+    """A faithful transcript: the model's own call with the arguments it
+    chose, then every result for that turn grouped in one user turn."""
+    seen: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["body"] = json.loads(request.content)
+        return _text_response("Here is what I found.")
+
+    calls = [
+        ToolCall(id="search_resources-0", name="search_resources", arguments={"query": "sleep"}),
+        ToolCall(id="search_resources-1", name="search_resources", arguments={"query": "exams"}),
+    ]
+    messages = [
+        LLMMessage(role="user", content="Any sleep tips?"),
+        LLMMessage(role="assistant", content="", tool_calls=calls),
+        LLMMessage(role="tool", content="guide one", tool_call_id="search_resources-0"),
+        LLMMessage(role="tool", content="guide two", tool_call_id="search_resources-1"),
+    ]
+    await _provider(handler).complete(_request(messages=messages))
+
+    contents = seen["body"]["contents"]
+    assert contents[1]["role"] == "model"
+    assert [p["functionCall"]["args"] for p in contents[1]["parts"]] == [
+        {"query": "sleep"},
+        {"query": "exams"},
+    ]
+    assert contents[2]["role"] == "user"
+    assert [p["functionResponse"]["response"]["result"] for p in contents[2]["parts"]] == [
+        "guide one",
+        "guide two",
+    ]
+    assert len(contents) == 3
