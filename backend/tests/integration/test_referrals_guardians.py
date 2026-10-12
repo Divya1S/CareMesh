@@ -101,7 +101,7 @@ async def test_referral_flow_assigns_and_notifies_guardian(
         json={"accept": False},
         headers=therapist2,
     )
-    assert again.status_code == 422
+    assert again.status_code == 409
 
     # The linked guardian got a notification, and events went to the outbox.
     guardian = await auth_header("guardian@a.caremesh.org")

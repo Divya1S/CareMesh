@@ -93,7 +93,7 @@ async def test_appointment_request_creates_workflow_for_the_care_team(
     again = await client.post(
         f"/api/v1/appointments/{pending[0]['request_id']}/acknowledge", headers=therapist
     )
-    assert again.status_code == 422
+    assert again.status_code == 409
     assert (await client.get("/api/v1/appointments", headers=therapist)).json() == []
 
 

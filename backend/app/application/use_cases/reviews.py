@@ -5,7 +5,12 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from uuid import UUID
 
-from app.application.errors import DomainValidationError, ForbiddenError, NotFoundError
+from app.application.errors import (
+    ConflictError,
+    DomainValidationError,
+    ForbiddenError,
+    NotFoundError,
+)
 from app.domain import events as domain_events
 from app.domain.entities import Role, User
 from app.domain.ids import uuid7
@@ -72,12 +77,23 @@ class ReviewService:
         if not await self._assignments.is_assigned(actor.id, signal.patient_id):
             raise ForbiddenError("You are not assigned to this patient")
         if workflow.state != RiskEscalationState.PENDING_REVIEW:
-            raise DomainValidationError("This review is already resolved")
+            raise ConflictError("This review is already resolved")
         if decision is ReviewDecision.EDIT and severity_override is None:
             raise DomainValidationError("Editing a signal requires a severity override")
 
         now = datetime.now(UTC)
         validate_transition(workflow.workflow_type, workflow.state, RiskEscalationState.RESOLVED)
+        # The transition is the compare and swap, so it goes first: a
+        # concurrent second decision fails here with a conflict instead of
+        # tripping the unique review constraint further down.
+        await self._workflows.transition(
+            workflow_id=workflow.id,
+            from_state=workflow.state,
+            to_state=RiskEscalationState.RESOLVED,
+            actor=str(actor.id),
+            reason=f"review {decision.value}",
+            now=now,
+        )
         await self._risks.add_review(
             RiskReview(
                 id=uuid7(),
@@ -89,14 +105,6 @@ class ReviewService:
                 note=note,
                 created_at=now,
             )
-        )
-        await self._workflows.transition(
-            workflow_id=workflow.id,
-            from_state=workflow.state,
-            to_state=RiskEscalationState.RESOLVED,
-            actor=str(actor.id),
-            reason=f"review {decision.value}",
-            now=now,
         )
         await self._audit.record(
             action="review_decided",

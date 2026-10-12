@@ -2,6 +2,7 @@
 and the clinician review. Runs the consumer logic directly against Postgres
 with the fake provider."""
 
+import asyncio
 import json
 
 import pytest
@@ -14,6 +15,7 @@ from app.infrastructure.ai.fake_provider import FakeLLMProvider
 from app.infrastructure.events.schemas import EventEnvelope, dlq_topic_for, topic_for
 from app.infrastructure.models import (
     AIRequestRow,
+    AuditLogRow,
     DomainEventLogRow,
     RiskReviewRow,
     RiskSignalRow,
@@ -205,7 +207,7 @@ async def test_review_queue_and_accept_decision(client, app, seeded, auth_header
         json={"decision": "reject"},
         headers=therapist,
     )
-    assert again.status_code == 422
+    assert again.status_code == 409
 
 
 async def test_review_authorization(client, app, seeded, auth_header):
@@ -371,3 +373,35 @@ async def test_failed_dead_letter_publish_holds_the_record(app, seeded):
         max_attempts=1,
     )
     assert outcome == "dlq" and consumer.commits == 1 and len(producer.sent) == 1
+
+
+async def test_concurrent_decisions_resolve_to_one_winner_and_one_conflict(
+    client, app, seeded, auth_header
+):
+    """Two therapists click at the same moment. The transition is a
+    compare and swap, so exactly one decision lands and the other gets a
+    409, with a single review row and a single resolved transition."""
+    envelope = await post_and_get_envelope(client, app, auth_header, "I want to hurt myself")
+    await run_consumer(app, envelope)
+    therapist = await auth_header("therapist@a.caremesh.org")
+    workflow_id = (await client.get("/api/v1/reviews", headers=therapist)).json()[0]["workflow_id"]
+
+    first, second = await asyncio.gather(
+        client.post(
+            f"/api/v1/reviews/{workflow_id}", json={"decision": "accept"}, headers=therapist
+        ),
+        client.post(
+            f"/api/v1/reviews/{workflow_id}", json={"decision": "reject"}, headers=therapist
+        ),
+    )
+    assert sorted([first.status_code, second.status_code]) == [200, 409]
+
+    async with app.state.session_factory() as session:
+        reviews = (await session.scalars(select(RiskReviewRow))).all()
+        transitions = (await session.scalars(select(WorkflowTransitionRow))).all()
+        audits = (
+            await session.scalars(select(AuditLogRow).where(AuditLogRow.action == "review_decided"))
+        ).all()
+    assert len(reviews) == 1
+    assert [t.to_state for t in transitions] == ["pending_review", "resolved"]
+    assert len(audits) == 1, "the losing decision must not be audited as if it happened"

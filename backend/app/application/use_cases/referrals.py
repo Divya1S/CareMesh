@@ -6,7 +6,12 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from uuid import UUID
 
-from app.application.errors import DomainValidationError, ForbiddenError, NotFoundError
+from app.application.errors import (
+    ConflictError,
+    DomainValidationError,
+    ForbiddenError,
+    NotFoundError,
+)
 from app.domain import events as domain_events
 from app.domain.entities import CareAssignment, Role, User
 from app.domain.ids import uuid7
@@ -126,7 +131,7 @@ class ReferralService:
             raise NotFoundError("Referral not found")
         workflow = await self._workflows.get_by_id(referral.workflow_id)
         if workflow.state != ReferralState.SUBMITTED:
-            raise DomainValidationError("This referral is already decided")
+            raise ConflictError("This referral is already decided")
 
         target = ReferralState.ACCEPTED if accept else ReferralState.DECLINED
         validate_transition(WorkflowType.REFERRAL, workflow.state, target)

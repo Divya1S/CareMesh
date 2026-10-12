@@ -7,6 +7,7 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.application.ai.types import AIRequestLogEntry
+from app.application.errors import ConflictError
 from app.domain.entities import (
     AuthSession,
     CareAssignment,
@@ -506,11 +507,19 @@ class SqlWorkflowRepository:
         reason: str,
         now: datetime,
     ) -> None:
-        await self._session.execute(
+        """Compare and swap on the state column. Two concurrent decisions
+        both read the same state; the second UPDATE waits on the row lock,
+        re evaluates the WHERE clause against the committed row, matches
+        nothing, and surfaces as a conflict instead of a lost update."""
+        result = await self._session.execute(
             update(WorkflowInstanceRow)
-            .where(WorkflowInstanceRow.id == workflow_id)
+            .where(WorkflowInstanceRow.id == workflow_id, WorkflowInstanceRow.state == from_state)
             .values(state=to_state, updated_at=now)
         )
+        if result.rowcount != 1:
+            raise ConflictError(
+                f"This workflow is no longer in state {from_state}; someone else moved it first"
+            )
         self._session.add(
             WorkflowTransitionRow(
                 id=uuid7(),

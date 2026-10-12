@@ -118,7 +118,7 @@ async def test_claim_lifecycle_deny_resubmit_approve(
         json={"approve": False, "denial_reason": "x"},
         headers=payer_headers,
     )
-    assert again.status_code == 422
+    assert again.status_code == 409
 
     # The history rail shows every transition, actor attributed.
     history = (
@@ -168,3 +168,41 @@ async def test_claim_role_boundaries(client, seeded, auth_header, payer_headers)
     assert (await client.get("/api/v1/claims", headers=patient)).status_code == 403
     assert (await client.get("/api/v1/conversations", headers=payer_headers)).status_code == 403
     assert (await client.get("/api/v1/reviews", headers=payer_headers)).status_code == 403
+
+
+async def test_resubmitting_an_approved_claim_is_a_conflict_not_a_crash(
+    client, app, seeded, auth_header, payer_headers
+):
+    """The state machine refusing a move must surface as a 409 problem,
+    never as an unhandled domain exception."""
+    therapist = await auth_header("therapist@a.caremesh.org")
+    check = (
+        await client.post(
+            "/api/v1/claims/eligibility", json={"member_id": "MEM-OK-1"}, headers=therapist
+        )
+    ).json()
+    claim = (
+        await client.post(
+            "/api/v1/claims",
+            json={
+                "patient_id": str(seeded["patient"].id),
+                "description": "Session, 50 minutes",
+                "amount_cents": 12000,
+                "eligibility_check_id": check["eligibility_check_id"],
+            },
+            headers=therapist,
+        )
+    ).json()
+    approved = await client.post(
+        f"/api/v1/claims/{claim['claim_id']}/decision",
+        json={"approve": True},
+        headers=payer_headers,
+    )
+    assert approved.status_code == 200
+    resubmit = await client.post(
+        f"/api/v1/claims/{claim['claim_id']}/resubmit",
+        json={"note": "Trying again anyway"},
+        headers=therapist,
+    )
+    assert resubmit.status_code == 409
+    assert resubmit.json()["type"].endswith("invalid_transition")

@@ -4,7 +4,11 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from uuid import UUID
 
-from app.application.errors import DomainValidationError, ForbiddenError, NotFoundError
+from app.application.errors import (
+    ConflictError,
+    ForbiddenError,
+    NotFoundError,
+)
 from app.domain.entities import Role, User
 from app.domain.workflows import AppointmentRequestState, WorkflowType, validate_transition
 
@@ -56,7 +60,7 @@ class AppointmentService:
             raise ForbiddenError("You are not assigned to this patient")
         workflow = await self._workflows.get_by_id(request.workflow_id)
         if workflow.state != AppointmentRequestState.REQUESTED:
-            raise DomainValidationError("This request is already acknowledged")
+            raise ConflictError("This request is already acknowledged")
         validate_transition(
             WorkflowType.APPOINTMENT_REQUEST,
             workflow.state,

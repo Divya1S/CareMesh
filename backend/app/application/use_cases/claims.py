@@ -7,7 +7,12 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from uuid import UUID
 
-from app.application.errors import DomainValidationError, ForbiddenError, NotFoundError
+from app.application.errors import (
+    ConflictError,
+    DomainValidationError,
+    ForbiddenError,
+    NotFoundError,
+)
 from app.domain import events as domain_events
 from app.domain.entities import Role, User
 from app.domain.ids import uuid7
@@ -158,7 +163,7 @@ class ClaimsService:
         claim = await self._load(actor, claim_id)
         workflow = await self._workflows.get_by_id(claim.workflow_id)
         if workflow.state not in (ClaimState.SUBMITTED, ClaimState.RESUBMITTED):
-            raise DomainValidationError("This claim is not awaiting review")
+            raise ConflictError("This claim is not awaiting review")
         if not approve and not (denial_reason and denial_reason.strip()):
             raise DomainValidationError("Denials must carry a reason; that is the point")
         target = ClaimState.APPROVED if approve else ClaimState.DENIED

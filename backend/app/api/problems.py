@@ -14,6 +14,7 @@ from app.application.errors import (
     RateLimitedError,
     UnauthorizedError,
 )
+from app.domain.workflows import InvalidTransitionError
 
 _STATUS_BY_ERROR: dict[type[AppError], int] = {
     UnauthorizedError: 401,
@@ -51,6 +52,14 @@ def register_exception_handlers(app: FastAPI) -> None:
         if isinstance(exc, RateLimitedError):
             response.headers["Retry-After"] = str(exc.retry_after_seconds)
         return response
+
+    @app.exception_handler(InvalidTransitionError)
+    async def invalid_transition_handler(
+        request: Request, exc: InvalidTransitionError
+    ) -> JSONResponse:
+        # A state machine refusing a move is an expected outcome (for
+        # example resubmitting an approved claim), never a server error.
+        return _problem(request, 409, "invalid_transition", "Invalid state transition", str(exc))
 
     @app.exception_handler(RequestValidationError)
     async def validation_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
