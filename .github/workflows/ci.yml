@@ -87,7 +87,7 @@ jobs:
         working-directory: backend
         run: |
           uv export --frozen --no-dev --no-hashes --no-emit-project -o /tmp/requirements.txt
-          uvx pip-audit --strict --desc=off -r /tmp/requirements.txt
+          uvx --python 3.13 pip-audit --strict --desc=off -r /tmp/requirements.txt
 
       - name: Dependency audit (frontend, production dependencies)
         working-directory: frontend
