@@ -75,6 +75,7 @@ class GatewayResult:
     provider: str
     simulated: bool
     ai_request_id: str
+    prompt_version: int = 0
     tool_activity: list[ToolActivity] = field(default_factory=list)
 
 

@@ -152,6 +152,7 @@ class AIGateway:
                 provider=response.provider,
                 simulated=response.simulated,
                 ai_request_id=entry.id,
+                prompt_version=prompt.version,
                 tool_activity=activities,
             )
         finally:
@@ -325,6 +326,7 @@ class AIGateway:
                     provider=self._provider.name,
                     simulated=entry.simulated,
                     ai_request_id=entry.id,
+                    prompt_version=prompt.version,
                     tool_activity=activities,
                 ),
             }

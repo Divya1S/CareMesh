@@ -41,9 +41,16 @@ class RiskSignal:
     evidence: str
     model: str
     prompt_version: int
-    ai_request_id: UUID
+    # None when the signal came from the deterministic crisis phrase floor
+    # because the model could not answer; the gateway audited that failure.
+    ai_request_id: UUID | None
     simulated: bool
     created_at: datetime
+
+
+# The "model" recorded on a signal that the crisis phrase floor produced on
+# its own. Not an AI model: a reviewed, tested phrase list.
+CRISIS_FLOOR_MODEL = "crisis-phrase-floor"
 
 
 @dataclass(frozen=True, slots=True)
@@ -85,9 +92,14 @@ CRISIS_PHRASES = (
 )
 
 
-def contains_crisis_language(text: str) -> bool:
+def matched_crisis_phrase(text: str) -> str | None:
+    """The first crisis phrase found in the text, or None."""
     lowered = text.lower()
-    return any(phrase in lowered for phrase in CRISIS_PHRASES)
+    return next((phrase for phrase in CRISIS_PHRASES if phrase in lowered), None)
+
+
+def contains_crisis_language(text: str) -> bool:
+    return matched_crisis_phrase(text) is not None
 
 
 def escalation_required(category: RiskCategory, severity: int) -> bool:

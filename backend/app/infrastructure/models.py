@@ -187,7 +187,8 @@ class RiskSignalRow(Base):
     evidence: Mapped[str] = mapped_column(Text, nullable=False)
     model: Mapped[str] = mapped_column(String(100), nullable=False)
     prompt_version: Mapped[int] = mapped_column(nullable=False)
-    ai_request_id: Mapped[UUID] = mapped_column(ForeignKey("ai_requests.id"), nullable=False)
+    # Null when the crisis phrase floor produced the signal without a model.
+    ai_request_id: Mapped[UUID | None] = mapped_column(ForeignKey("ai_requests.id"), nullable=True)
     simulated: Mapped[bool] = mapped_column(Boolean, nullable=False)
     created_at: Mapped[datetime] = _created_at()
 

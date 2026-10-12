@@ -1,11 +1,20 @@
 """Consumer for conversation events: risk analysis (S6).
 
-On PatientMessageCreated with a patient sender, the Risk Signal agent runs
-through the AI Gateway, and deterministic thresholds decide whether a Risk
-Escalation workflow starts. The idempotency mark and every effect (signal,
-workflow, outbox events) commit in ONE transaction, so a crash before commit
-replays cleanly and a duplicate delivery is skipped. Message content never
-appears in logs or event payloads.
+On PatientMessageCreated with a patient sender, the message is classified
+through the AI Gateway and deterministic thresholds decide whether a Risk
+Escalation workflow starts. Three phases per event:
+
+1. Read phase, short transaction: a cheap duplicate check and the message.
+2. Model phase, no transaction held: the classifier call, which can take
+   seconds on a real provider. The crisis phrase floor is evaluated here
+   too, before the model, so a model failure never silences a disclosure.
+3. Write phase, one transaction: the idempotency mark (authoritative,
+   ON CONFLICT DO NOTHING) and every effect (signal, workflow, outbox
+   events) commit together, so a crash before commit replays cleanly and
+   a duplicate delivery is skipped. A duplicate that races past the read
+   phase costs one wasted model call and nothing else.
+
+Message content never appears in logs or event payloads.
 
 Run: uv run python -m app.workers.conversation_consumer
 """
@@ -15,12 +24,19 @@ from datetime import UTC, datetime
 from uuid import UUID
 
 import structlog
+from aiokafka import TopicPartition
 from pydantic import ValidationError
+from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.application.ai.gateway import AIGateway
-from app.application.use_cases.risk_analysis import RiskAnalysisService
+from app.application.errors import NotFoundError
+from app.application.use_cases.risk_analysis import (
+    RiskAnalysisService,
+    RiskClassification,
+    RiskClassifier,
+)
 from app.domain.events import PATIENT_MESSAGE_CREATED
 from app.infrastructure.ai.factory import create_provider
 from app.infrastructure.db import create_engine, create_session_factory
@@ -42,6 +58,18 @@ GROUP_ID = "caremesh-conversation-worker"
 logger = structlog.get_logger()
 
 
+async def _already_processed(session: AsyncSession, envelope: EventEnvelope) -> bool:
+    """Read only pre check so a redelivered event skips the model call. The
+    insert in _mark_processed stays the authoritative decision."""
+    row = await session.scalar(
+        select(ProcessedEventRow.event_id).where(
+            ProcessedEventRow.consumer_group == GROUP_ID,
+            ProcessedEventRow.event_id == envelope.event_id,
+        )
+    )
+    return row is not None
+
+
 async def _mark_processed(session: AsyncSession, envelope: EventEnvelope) -> bool:
     """Inserts the idempotency mark in the CALLER'S transaction. Returns
     False when this group already processed the event."""
@@ -57,46 +85,73 @@ async def _mark_processed(session: AsyncSession, envelope: EventEnvelope) -> boo
     return result.rowcount == 1
 
 
-async def process_envelope(
-    envelope: EventEnvelope, session: AsyncSession, gateway: AIGateway
-) -> str:
-    """One event, one transaction. Returns 'processed' or 'duplicate'."""
-    if not await _mark_processed(session, envelope):
-        await session.rollback()
-        logger.info(
-            "event_duplicate_skipped",
-            event_id=str(envelope.event_id),
-            event_type=envelope.event_type,
-        )
-        return "duplicate"
-
-    if (
+def _needs_risk_analysis(envelope: EventEnvelope) -> bool:
+    return (
         envelope.event_type == PATIENT_MESSAGE_CREATED
         and envelope.payload.get("sender_type") == "patient"
-    ):
-        service = RiskAnalysisService(
-            messages=SqlMessageRepository(session),
-            risks=SqlRiskRepository(session),
-            workflows=SqlWorkflowRepository(session),
-            outbox=SqlEventOutbox(session),
-            gateway=gateway,
-        )
-        signal = await service.analyze_message(
-            message_id=UUID(envelope.payload["message_id"]),
-            conversation_id=UUID(envelope.payload["conversation_id"]),
-            patient_id=UUID(envelope.payload["patient_id"]),
+    )
+
+
+def _log_duplicate(envelope: EventEnvelope) -> None:
+    logger.info(
+        "event_duplicate_skipped",
+        event_id=str(envelope.event_id),
+        event_type=envelope.event_type,
+    )
+
+
+async def process_envelope(
+    envelope: EventEnvelope, session_factory: async_sessionmaker, gateway: AIGateway
+) -> str:
+    """One event. Returns 'processed' or 'duplicate'. Raises on failure so
+    the caller can retry and dead letter; a failed attempt leaves no state."""
+    classification: RiskClassification | None = None
+    if _needs_risk_analysis(envelope):
+        async with session_factory() as session:
+            if await _already_processed(session, envelope):
+                _log_duplicate(envelope)
+                return "duplicate"
+            message = await SqlMessageRepository(session).get_by_id(
+                UUID(envelope.payload["message_id"])
+            )
+        if message is None:
+            raise NotFoundError(f"Message {envelope.payload['message_id']} not found")
+        # No transaction is open here: a slow provider must not pin a
+        # database connection or hold the idempotency row lock.
+        classification = await RiskClassifier(gateway).classify(
+            content=message.content,
             organization_id=envelope.organization_id,
             correlation_id=envelope.correlation_id,
-            causation_id=str(envelope.event_id),
         )
-        logger.info(
-            "risk_signal_stored",
-            risk_signal_id=str(signal.id),
-            category=signal.category.value,
-            severity=signal.severity,
-            correlation_id=envelope.correlation_id,
-        )
-    await session.commit()
+
+    async with session_factory() as session:
+        if not await _mark_processed(session, envelope):
+            await session.rollback()
+            _log_duplicate(envelope)
+            return "duplicate"
+        if classification is not None:
+            signal = await RiskAnalysisService(
+                risks=SqlRiskRepository(session),
+                workflows=SqlWorkflowRepository(session),
+                outbox=SqlEventOutbox(session),
+            ).record(
+                classification=classification,
+                message_id=UUID(envelope.payload["message_id"]),
+                conversation_id=UUID(envelope.payload["conversation_id"]),
+                patient_id=UUID(envelope.payload["patient_id"]),
+                organization_id=envelope.organization_id,
+                correlation_id=envelope.correlation_id,
+                causation_id=str(envelope.event_id),
+            )
+            logger.info(
+                "risk_signal_stored",
+                risk_signal_id=str(signal.id),
+                category=signal.category.value,
+                severity=signal.severity,
+                floor_only=classification.floor_only,
+                correlation_id=envelope.correlation_id,
+            )
+        await session.commit()
     logger.info(
         "event_processed",
         event_id=str(envelope.event_id),
@@ -115,7 +170,8 @@ async def handle_raw(
     max_attempts: int,
 ) -> str:
     """Processes one record with bounded retries, then dead letters it.
-    Returns 'processed', 'duplicate', or 'dlq'."""
+    Returns 'processed', 'duplicate', or 'dlq'. Raises only when the dead
+    letter publish itself fails, so the caller can hold its position."""
     last_error: Exception | None = None
     for attempt in range(1, max_attempts + 1):
         try:
@@ -125,8 +181,7 @@ async def handle_raw(
             last_error = exc
             break
         try:
-            async with session_factory() as session:
-                return await process_envelope(envelope, session, gateway)
+            return await process_envelope(envelope, session_factory, gateway)
         except Exception as exc:  # transient infra or AI errors retry
             last_error = exc
             await asyncio.sleep(min(2**attempt * 0.1, 2.0))
@@ -141,14 +196,54 @@ async def handle_raw(
     return "dlq"
 
 
+async def handle_record(
+    consumer,
+    record,
+    session_factory: async_sessionmaker,
+    producer,
+    gateway: AIGateway,
+    *,
+    source_topic: str,
+    max_attempts: int,
+) -> str:
+    """One record from the broker, committed only after it was processed,
+    skipped as a duplicate, or dead lettered. If even dead lettering fails
+    (broker trouble), the consumer seeks back to the record so the next
+    poll delivers it again: a record is never skipped, because a skipped
+    record here is a message nobody scanned."""
+    try:
+        outcome = await handle_raw(
+            record.value,
+            session_factory,
+            producer,
+            gateway,
+            source_topic=source_topic,
+            max_attempts=max_attempts,
+        )
+    except Exception as exc:
+        logger.error(
+            "consumer_record_held",
+            error_type=type(exc).__name__,
+            partition=record.partition,
+            offset=record.offset,
+        )
+        consumer.seek(TopicPartition(record.topic, record.partition), record.offset)
+        return "held"
+    await consumer.commit()
+    return outcome
+
+
 async def main() -> None:
     settings = get_settings()
     configure_logging(settings.log_level, settings.log_json)
     engine = create_engine(settings.database_url)
     session_factory = create_session_factory(engine)
+    # The audit log gets its own small pool: a request log write must never
+    # wait on the connection its own transaction is holding.
+    audit_engine = create_engine(settings.database_url, pool_size=2, max_overflow=2)
     gateway = AIGateway(
         create_provider(settings.llm_provider),
-        SqlAIRequestLog(session_factory),
+        SqlAIRequestLog(create_session_factory(audit_engine)),
         timeout_seconds=settings.ai_timeout_seconds,
     )
     topic = topic_for(settings.kafka_topic_prefix, PATIENT_MESSAGE_CREATED)
@@ -166,20 +261,16 @@ async def main() -> None:
         while True:
             try:
                 async for record in consumer:
-                    try:
-                        await handle_raw(
-                            record.value,
-                            session_factory,
-                            producer,
-                            gateway,
-                            source_topic=topic,
-                            max_attempts=settings.consumer_max_attempts,
-                        )
-                        await consumer.commit()
-                    except Exception as exc:
-                        # handle_raw already dead letters processing errors;
-                        # this catches commit and DLQ produce failures.
-                        logger.error("consumer_iteration_failed", error_type=type(exc).__name__)
+                    outcome = await handle_record(
+                        consumer,
+                        record,
+                        session_factory,
+                        producer,
+                        gateway,
+                        source_topic=topic,
+                        max_attempts=settings.consumer_max_attempts,
+                    )
+                    if outcome == "held":
                         await asyncio.sleep(1.0)
             except asyncio.CancelledError:
                 raise
@@ -190,6 +281,7 @@ async def main() -> None:
         await consumer.stop()
         await producer.stop()
         await engine.dispose()
+        await audit_engine.dispose()
 
 
 if __name__ == "__main__":

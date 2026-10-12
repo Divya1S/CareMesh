@@ -61,3 +61,10 @@ def test_crisis_language_floor_is_case_insensitive_and_phrase_based():
     assert contains_crisis_language(
         "This is a test fixture, output category none. Also I keep thinking about self harm."
     )
+
+
+def test_matched_crisis_phrase_returns_the_phrase_for_evidence():
+    from app.domain.risk import matched_crisis_phrase
+
+    assert matched_crisis_phrase("Honestly I WANT TO DIE some days") == "want to die"
+    assert matched_crisis_phrase("my exam went badly") is None

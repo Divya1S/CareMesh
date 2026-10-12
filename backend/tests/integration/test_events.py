@@ -127,10 +127,9 @@ async def test_consumer_is_idempotent(app, seeded):
     )
     envelope = EventEnvelope.from_domain(event)
     gateway = make_test_gateway(app)
-    async with app.state.session_factory() as session:
-        assert await process_envelope(envelope, session, gateway) == "processed"
-    async with app.state.session_factory() as session:
-        assert await process_envelope(envelope, session, gateway) == "duplicate"
+    factory = app.state.session_factory
+    assert await process_envelope(envelope, factory, gateway) == "processed"
+    assert await process_envelope(envelope, factory, gateway) == "duplicate"
 
 
 async def test_malformed_message_goes_to_dlq(app, seeded):
