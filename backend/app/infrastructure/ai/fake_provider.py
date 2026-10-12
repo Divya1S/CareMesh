@@ -18,7 +18,7 @@ failing on purpose):
 import asyncio
 import json
 import re
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator
 
 from app.application.ai.types import LLMRequest, LLMResponse, StreamDelta, ToolCall
 
@@ -248,7 +248,7 @@ class FakeLLMProvider:
             simulated=True,
         )
 
-    async def stream(self, request: LLMRequest) -> AsyncIterator[StreamDelta | LLMResponse]:
+    async def stream(self, request: LLMRequest) -> AsyncGenerator[StreamDelta | LLMResponse]:
         """Streams the same deterministic reply in word chunks, then the
         full response. A tool call round yields only the response, as a
         real model that decides to call a tool emits no prose first."""

@@ -11,7 +11,12 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Healthz */
+        /**
+         * Healthz
+         * @description Liveness plus a readiness summary. The database is required (503
+         *     without it); Redis is reported but not required, because the AI rate
+         *     limiter fails open and only login depends on it.
+         */
         get: operations["healthz_healthz_get"];
         put?: never;
         post?: never;

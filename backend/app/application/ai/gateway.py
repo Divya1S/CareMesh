@@ -8,7 +8,7 @@ happens in infrastructure; business logic only ever sees this class.
 
 import asyncio
 import time
-from collections.abc import AsyncIterator, Sequence
+from collections.abc import AsyncGenerator, AsyncIterator, Sequence
 from dataclasses import replace
 from typing import Protocol
 from uuid import UUID
@@ -33,6 +33,10 @@ from app.application.errors import AppError
 from app.domain.ids import uuid7
 
 logger = structlog.get_logger()
+
+# Audit writes handed off when the request task is being cancelled (client
+# disconnect). Kept referenced so the event loop never drops them half done.
+_detached_log_writes: set[asyncio.Task] = set()
 
 # A model gets at most this many rounds of tool use before it must answer,
 # and at most this many executed tool calls per round. Both bounds are
@@ -64,7 +68,7 @@ class LLMProvider(Protocol):
 
     async def complete(self, request: LLMRequest) -> LLMResponse: ...
 
-    def stream(self, request: LLMRequest) -> AsyncIterator[StreamDelta | LLMResponse]:
+    def stream(self, request: LLMRequest) -> AsyncGenerator[StreamDelta | LLMResponse]:
         """Yields text deltas, then exactly one LLMResponse."""
         ...
 
@@ -206,6 +210,22 @@ class AIGateway:
         entry.output_tokens += response.output_tokens
         entry.cost_usd += response.cost_usd
 
+    def _log_detached(self, entry: AIRequestLogEntry) -> None:
+        """For the cancellation path. Starlette cancels a disconnected
+        response through an anyio cancel scope, which cancels every later
+        await in the same task, including an audit write in a finally
+        block. A fresh task sits outside that scope and completes."""
+        task = asyncio.ensure_future(self._log_safely(entry))
+        _detached_log_writes.add(task)
+        task.add_done_callback(_detached_log_writes.discard)
+
+    @staticmethod
+    async def flush_detached_log_writes() -> None:
+        """Waits for audit writes handed off on the cancellation path. The
+        app calls it at shutdown so no audit row is lost to process exit."""
+        if _detached_log_writes:
+            await asyncio.gather(*list(_detached_log_writes), return_exceptions=True)
+
     async def _log_safely(self, entry: AIRequestLogEntry) -> None:
         """Auditing must never become a failure mode of the thing it audits:
         an exception raised here (inside the callers' finally blocks) would
@@ -239,13 +259,12 @@ class AIGateway:
         for _ in range(MAX_TOOL_ITERATIONS):
             if stream:
                 response: LLMResponse | None = None
-                async with asyncio.timeout(self._timeout):
-                    async for item in self._provider.stream(request):
-                        if isinstance(item, StreamDelta):
-                            if item.text:
-                                yield {"type": "delta", "text": item.text}
-                        else:
-                            response = item
+                async for item in self._stream_round(request):
+                    if isinstance(item, StreamDelta):
+                        if item.text:
+                            yield {"type": "delta", "text": item.text}
+                    else:
+                        response = item
                 if response is None:
                     raise AIProviderError("The AI provider stream ended without a response")
             else:
@@ -301,6 +320,27 @@ class AIGateway:
             request = replace(request, messages=messages)
         # The bound was exhausted with the model still asking for tools.
         raise AIProviderError("Tool iteration limit reached without an answer")
+
+    async def _stream_round(self, request: LLMRequest) -> AsyncIterator[StreamDelta | LLMResponse]:
+        """One provider stream under a whole round deadline. Each item is
+        awaited with the time left, so no timeout context ever spans a
+        yield: a timeout that expired while the consumer was busy would
+        otherwise cancel the consumer's own await instead of the provider."""
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + self._timeout
+        stream = self._provider.stream(request)
+        try:
+            while True:
+                remaining = deadline - loop.time()
+                if remaining <= 0:
+                    raise TimeoutError("stream round deadline passed")
+                try:
+                    item = await asyncio.wait_for(anext(stream), timeout=remaining)
+                except StopAsyncIteration:
+                    return
+                yield item
+        finally:
+            await stream.aclose()
 
     async def _call_validated(
         self, request: LLMRequest, tools: Sequence[Tool], entry: AIRequestLogEntry
@@ -370,6 +410,7 @@ class AIGateway:
         )
         entry = self._new_entry(prompt, organization_id, correlation_id, request)
         started = time.perf_counter()
+        logged = False
         try:
             # Provenance goes out before any text so the UI labels the live
             # bubble from data.
@@ -415,9 +456,13 @@ class AIGateway:
             raise AITimeoutError("The AI provider did not answer in time") from exc
         except (asyncio.CancelledError, GeneratorExit):
             # The client went away mid stream. The reply was never persisted,
-            # so the audit row must not claim the call succeeded.
+            # so the audit row must not claim the call succeeded. This task
+            # is being cancelled, so the write cannot be awaited here.
             entry.status = AI_STATUS.cancelled
             entry.error_type = "ClientDisconnected"
+            entry.latency_ms = round((time.perf_counter() - started) * 1000, 1)
+            self._log_detached(entry)
+            logged = True
             raise
         except AppError as exc:
             entry.status = AI_STATUS.provider_error
@@ -428,8 +473,9 @@ class AIGateway:
             entry.error_type = type(exc).__name__
             raise AIProviderError("The AI provider failed") from exc
         finally:
-            entry.latency_ms = round((time.perf_counter() - started) * 1000, 1)
-            await self._log_safely(entry)
+            if not logged:
+                entry.latency_ms = round((time.perf_counter() - started) * 1000, 1)
+                await self._log_safely(entry)
 
     @staticmethod
     async def _run_tool(registry: dict[str, Tool], call: ToolCall) -> ToolResult:

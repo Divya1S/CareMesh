@@ -1,6 +1,8 @@
 """Gateway tests: every call is logged with the simulated flag, validation
 retries then fails typed, and timeouts are recorded. Needs Postgres."""
 
+import asyncio
+
 import pytest
 from pydantic import BaseModel, Field
 from sqlalchemy import select
@@ -274,7 +276,45 @@ async def test_client_disconnect_mid_stream_is_audited_as_cancelled(app, seeded)
     )
     assert (await anext(stream))["type"] == "start"
     assert (await anext(stream))["type"] == "delta"
-    await stream.aclose()  # what Starlette does when the client goes away
+    await stream.aclose()  # closes the generator like a disconnect does
+    # The cancellation path cannot await inside the dying task, so the
+    # write is detached; wait for it like the app's shutdown does.
+    await AIGateway.flush_detached_log_writes()
     row = await latest_log(app)
     assert row.status == "cancelled" and row.error_type == "ClientDisconnected"
     assert row.response_text is None
+
+
+class StallingStreamProvider:
+    """Streams one delta, then never finishes: a provider that hangs mid
+    reply. The round deadline must fire as a timeout."""
+
+    name = "stalling"
+    model_name = "stalling-1"
+    simulated = True
+
+    async def complete(self, request):
+        raise AssertionError("stream path only")
+
+    async def stream(self, request):
+        from app.application.ai.types import StreamDelta
+
+        yield StreamDelta("first ")
+        await asyncio.sleep(3600)
+
+
+async def test_stream_that_stalls_after_a_delta_times_out(app, seeded):
+    gateway = AIGateway(
+        StallingStreamProvider(), SqlAIRequestLog(app.state.session_factory), timeout_seconds=0.3
+    )
+    events = []
+    with pytest.raises(AITimeoutError):
+        async for event in gateway.stream_reply(
+            prompt_name="dira_reply",
+            user_messages=[LLMMessage("user", "hi")],
+            organization_id=seeded["org_a"].id,
+        ):
+            events.append(event["type"])
+    assert events == ["start", "delta"]
+    row = await latest_log(app)
+    assert row.status == "timeout"

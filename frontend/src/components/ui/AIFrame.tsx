@@ -10,12 +10,17 @@ export function AIFrame({
   model,
   promptVersion,
   simulated,
+  label = "AI generated",
   className = "",
 }: {
   children: ReactNode;
   model?: string;
   promptVersion?: string;
   simulated?: boolean;
+  /** The provenance label. Defaults to "AI generated"; a deterministic
+   * rule that produced the content (the crisis phrase floor when the
+   * model was unavailable) says so instead. */
+  label?: string;
   className?: string;
 }) {
   const provenance = [model, promptVersion].filter(Boolean).join(" · ");
@@ -25,7 +30,7 @@ export function AIFrame({
     >
       <div className="mb-2 flex flex-wrap items-center gap-2">
         <Chip tone="ai" title={provenance || undefined}>
-          <span aria-hidden>✦</span> AI generated
+          <span aria-hidden>✦</span> {label}
         </Chip>
         {simulated ? (
           <Chip tone="ai" title="Produced by the fake provider, not a real model">

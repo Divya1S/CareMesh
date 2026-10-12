@@ -26,6 +26,10 @@ import { clearTokens, isLoggedIn } from "@/lib/auth";
 
 type Decided = { decision: ReviewDecision };
 
+// A signal the crisis phrase floor produced on its own (the model was
+// unavailable). It is a reviewed rule, not AI output, and is labeled so.
+const FLOOR_MODEL = "crisis-phrase-floor";
+
 export default function ClinicianPage() {
   const router = useRouter();
   const [me, setMe] = useState<Me | null>(null);
@@ -182,8 +186,13 @@ export default function ClinicianPage() {
                 ) : (
                   <AIFrame
                     model={item.model}
-                    promptVersion={`risk_signal v${item.prompt_version}`}
+                    promptVersion={
+                      item.model === FLOOR_MODEL
+                        ? "deterministic floor, model unavailable"
+                        : `risk_signal v${item.prompt_version}`
+                    }
                     simulated={item.simulated}
+                    label={item.model === FLOOR_MODEL ? "Rule based" : undefined}
                   >
                     <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                       <SeverityLabel severity={item.severity} />

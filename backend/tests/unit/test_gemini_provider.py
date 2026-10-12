@@ -329,3 +329,28 @@ async def test_assistant_tool_call_turn_is_sent_with_its_real_arguments() -> Non
         "guide two",
     ]
     assert len(contents) == 3
+
+
+async def test_stream_raises_on_a_non_retryable_status() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(400, json={"error": {"message": "bad request"}})
+
+    with pytest.raises(httpx.HTTPStatusError):
+        async for _ in _provider(handler).stream(_request()):
+            pass
+
+
+async def test_empty_assistant_turn_is_not_sent() -> None:
+    seen: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["body"] = json.loads(request.content)
+        return _text_response("ok")
+
+    messages = [
+        LLMMessage(role="user", content="hi"),
+        LLMMessage(role="assistant", content=""),
+        LLMMessage(role="user", content="again"),
+    ]
+    await _provider(handler).complete(_request(messages=messages))
+    assert [c["role"] for c in seen["body"]["contents"]] == ["user", "user"]

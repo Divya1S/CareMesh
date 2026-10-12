@@ -28,3 +28,14 @@ describe("AIFrame", () => {
     expect(screen.getByTitle("fake-model · dira-v1")).toBeInTheDocument();
   });
 });
+
+it("can label rule based content instead of calling it AI generated", () => {
+  render(
+    <AIFrame model="crisis-phrase-floor" label="Rule based" simulated={false}>
+      flagged
+    </AIFrame>,
+  );
+  expect(screen.getByText("Rule based")).toBeInTheDocument();
+  expect(screen.queryByText("AI generated")).not.toBeInTheDocument();
+  expect(screen.queryByText("SIMULATED")).not.toBeInTheDocument();
+});

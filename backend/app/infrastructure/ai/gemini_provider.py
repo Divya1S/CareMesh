@@ -15,7 +15,7 @@ it.
 import asyncio
 import json
 import random
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator, AsyncIterator
 
 import httpx
 
@@ -103,7 +103,8 @@ class GeminiProvider:
                 for call in message.tool_calls:
                     names_by_call_id[call.id] = call.name
                     parts.append({"functionCall": {"name": call.name, "args": call.arguments}})
-                contents.append({"role": "model", "parts": parts})
+                if parts:  # Gemini rejects a turn with no parts
+                    contents.append({"role": "model", "parts": parts})
                 continue
             contents.append({"role": "user", "parts": [{"text": message.content}]})
         flush_responses()
@@ -197,7 +198,7 @@ class GeminiProvider:
             return self._parse(response.json())
         raise RuntimeError("Gemini retry loop exhausted")  # pragma: no cover
 
-    async def stream(self, request: LLMRequest) -> AsyncIterator[StreamDelta | LLMResponse]:
+    async def stream(self, request: LLMRequest) -> AsyncGenerator[StreamDelta | LLMResponse]:
         payload = self._payload(request)
         path = f"/models/{self.model_name}:streamGenerateContent"
         for attempt in range(self._max_retries + 1):

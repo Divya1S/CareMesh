@@ -27,6 +27,10 @@ TEST_REDIS_URL = os.environ.get("TEST_REDIS_URL", "redis://localhost:6379/1")
 # the real brute force limit would trip constantly. The lockout test builds
 # its own limiter state instead.
 os.environ.setdefault("LOGIN_ATTEMPTS_PER_MINUTE", "100000")
+# A developer's backend/.env may point at a real provider; the suite never
+# spends money or depends on the network.
+os.environ["LLM_PROVIDER"] = "fake"
+os.environ["EMBEDDING_PROVIDER"] = "local_lexical"
 from app.infrastructure.settings import get_settings  # noqa: E402
 
 get_settings.cache_clear()

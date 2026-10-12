@@ -11,6 +11,7 @@ Create Date: 2026-10-12 13:10:00.000000
 
 from collections.abc import Sequence
 
+import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
 
@@ -30,6 +31,18 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    # Floor only signals have no AI request. They are append only clinical
+    # records, so refuse rather than delete or fail halfway.
+    nulls = (
+        op.get_bind()
+        .execute(sa.text("SELECT count(*) FROM risk_signals WHERE ai_request_id IS NULL"))
+        .scalar_one()
+    )
+    if nulls:
+        raise RuntimeError(
+            f"{nulls} risk_signals rows have no ai_request_id (crisis phrase floor); "
+            "this downgrade would drop them. Resolve them first."
+        )
     op.alter_column(
         "risk_signals",
         "ai_request_id",

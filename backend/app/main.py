@@ -64,6 +64,9 @@ def configure_state(app: FastAPI, settings: Settings, database_url: str) -> None
 
 
 async def dispose_state(app: FastAPI) -> None:
+    # Audit rows for disconnected streams are written by detached tasks;
+    # let them land before the pools go away.
+    await AIGateway.flush_detached_log_writes()
     provider = getattr(app.state, "llm_provider", None)
     close = getattr(provider, "aclose", None)
     if close is not None:

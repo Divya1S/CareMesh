@@ -19,6 +19,7 @@ from app.application.use_cases.ops import OpsService
 from app.application.use_cases.referrals import ReferralService
 from app.application.use_cases.reviews import ReviewService
 from app.domain.entities import User
+from app.infrastructure.ai.embeddings import EmbeddingProvider
 from app.infrastructure.payer.fake_payer import FakePayerAdapter
 from app.infrastructure.rate_limit import RedisRateLimiter
 from app.infrastructure.repositories import (
@@ -107,12 +108,12 @@ def get_ai_gateway(request: Request) -> AIGateway:
     return request.app.state.gateway
 
 
-def get_embedder(request: Request):
+def get_embedder(request: Request) -> EmbeddingProvider:
     return request.app.state.embedder
 
 
 AIGatewayDep = Annotated[AIGateway, Depends(get_ai_gateway)]
-EmbedderDep = Annotated[object, Depends(get_embedder)]
+EmbedderDep = Annotated[EmbeddingProvider, Depends(get_embedder)]
 
 
 def get_conversation_service(

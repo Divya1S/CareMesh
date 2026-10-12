@@ -254,3 +254,21 @@ async def test_ai_provider_failure_is_a_gateway_error_not_a_500(client, app, see
     )
     assert response.status_code == 502
     assert response.json()["type"].endswith("ai_provider_error")
+
+
+async def test_healthz_is_503_when_the_database_is_down(client, app):
+    class BrokenSession:
+        async def __aenter__(self):
+            raise ConnectionError("database down")
+
+        async def __aexit__(self, *exc):
+            return False
+
+    live = app.state.session_factory
+    app.state.session_factory = lambda: BrokenSession()
+    try:
+        response = await client.get("/healthz")
+    finally:
+        app.state.session_factory = live
+    assert response.status_code == 503
+    assert response.json()["database"] == "unavailable"

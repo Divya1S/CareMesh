@@ -68,6 +68,12 @@ jobs:
           name: backend-coverage
           path: backend/coverage.xml
 
+      - name: Generated API types are current
+        run: |
+          ./scripts/gen-api-types.sh
+          git diff --exit-code -- frontend/openapi.json frontend/src/lib/api-schema.d.ts \
+            || (echo "Run ./scripts/gen-api-types.sh and commit the result" && exit 1)
+
       - name: Frontend lint, typecheck, tests
         working-directory: frontend
         run: |

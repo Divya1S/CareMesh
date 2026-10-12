@@ -38,6 +38,6 @@ async def metrics_endpoint(request: Request) -> Response:
     token = get_settings().metrics_token
     if token:
         presented = request.headers.get("authorization", "").removeprefix("Bearer ").strip()
-        if not hmac.compare_digest(presented, token):
+        if not hmac.compare_digest(presented.encode(), token.encode()):
             raise UnauthorizedError("Metrics require the scrape token")
     return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
