@@ -29,8 +29,12 @@ protocol, never a vendor SDK. The gateway owns:
   client that disconnects mid stream is audited as `cancelled`, not
   `ok`. Prometheus counters increment in the same code path.
 - **No transaction during a model call:** both reply paths and the risk
-  consumer commit and release the database connection before calling the
-  provider, so a slow model never pins the pool.
+  consumer commit and release the database connection before the first
+  provider call, so a slow model does not pin the pool. One exception is
+  deliberate: when a tool writes (request_appointment), the rounds after
+  it run inside the transaction that holds the write, so the reply and
+  the request commit together; that transaction also holds the per
+  conversation advisory lock until the request ends.
 
 ## Providers
 

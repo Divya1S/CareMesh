@@ -31,7 +31,7 @@ there.
 
 ```bash
 ./scripts/verify.sh          # the gate: lint, type check, migrations, tests with coverage, evals
-./scripts/e2e.sh             # full browser journey (boots everything itself)
+./scripts/e2e.sh             # full browser journey (boots everything itself; once: cd frontend && npx playwright install chromium)
 ./scripts/gen-api-types.sh   # regenerate frontend types after API changes
 docker compose --profile observability up -d   # Prometheus :9090, Grafana :3001
 ```

@@ -14,7 +14,11 @@ refresh tokens in families: each refresh token is single use and backed by
 a database session row; presenting an already rotated token is treated as
 reuse, revokes every session in the family (so a thief who refreshed
 first loses access too), and is audited; of two concurrent uses exactly
-one wins. Login verifies a dummy hash for unknown emails so response
+one wins. Residual gap: when the two uses are truly simultaneous, the
+loser's family revocation runs before the winner's new session commits,
+so the winner's chain survives; the loser must sign in again, which
+starts a new family. Reuse detected later, the common case, revokes the
+whole family. Login verifies a dummy hash for unknown emails so response
 timing does not reveal account existence (measured: 29 ms either way).
 Outside dev the settings refuse a JWT secret under 32 bytes.
 

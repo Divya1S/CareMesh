@@ -89,10 +89,10 @@ workflow, AI call, and event, including replaying events safely.
 
 | Metric | Value |
 |---|---|
-| Backend tests (unit + integration against real Postgres, Redis, Redpanda) | 162 |
+| Backend tests (unit + integration against real Postgres, Redis, Redpanda) | 170 |
 | Backend line coverage (floor 80 percent in CI) | 86 percent |
 | Backend type check (mypy) | clean |
-| Frontend tests | 17 |
+| Frontend tests | 18 |
 | Production dependency advisories (pip-audit, npm audit, in CI) | 0 |
 | Eval cases (risk, Dira safety and tool use, retrieval) | 23 (20 gated under the default lexical embeddings, all 23 under fastembed) |
 | Escalation precision / recall on the eval set | 1.0 / 1.0 |

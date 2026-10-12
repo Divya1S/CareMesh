@@ -188,10 +188,10 @@ more than the code: THREAT_MODEL's refresh replay row, ADRs 0004, 0005,
 | Check | Result |
 |---|---|
 | `./scripts/verify.sh` | all checks passed |
-| Backend tests | 162 passed (118 at the start) |
+| Backend tests | 170 passed (118 at the start) |
 | Backend coverage | 85.9 percent, floor 80 |
 | mypy | no issues in 69 files |
-| Frontend lint, typecheck, tests | clean, 17 passed (13 at the start) |
+| Frontend lint, typecheck, tests | clean, 18 passed (13 at the start) |
 | Frontend production build | succeeds |
 | Evals | risk 7/7, dira 9/9, retrieval 7/7 |
 | `npm audit --omit=dev` | 0 vulnerabilities |
@@ -199,6 +199,64 @@ more than the code: THREAT_MODEL's refresh replay row, ADRs 0004, 0005,
 | pip-audit on production dependencies | clean after upgrading pyjwt, httpx2, and urllib3 |
 | Browser journey `./scripts/e2e.sh` | passed: student, Dira, risk, review, ops, in headless Chromium |
 | Live model check | not run; it costs nothing on the free tier but the audit stayed offline by design |
+
+## Independent review of the audit's own changes
+
+After the fixes landed, the diff was reviewed again as if written by
+someone else: every modified path traced through its callers, and every
+suspicion turned into an experiment. What that found, all fixed and
+tested:
+
+1. **The cancelled audit status never landed on a real server (confirmed
+   defect in my own fix).** The original test closed the generator with
+   `aclose()`, which does not reproduce what Starlette does on a client
+   disconnect: it cancels the response task through an anyio cancel
+   scope, which re cancels every later await in that task, including the
+   audit write in the `finally` block. A new test runs uvicorn in process,
+   drops the connection after the first delta, and failed exactly that
+   way (the pool connection was terminated mid write). The cancellation
+   path now hands the write to a task outside the cancel scope, kept
+   referenced and flushed at shutdown; the real server test passes.
+2. **A timeout context spanned `yield` (confirmed defect).** The streaming
+   loop wrapped `async for` in `asyncio.timeout`, so a deadline that
+   expired while the consumer was busy would have cancelled the
+   consumer's own await (for example sending bytes) rather than the
+   provider, and the audit would have called it a disconnect. The round
+   now awaits each stream item with the time remaining, so no timeout
+   context ever contains a yield. A test streams one delta and stalls;
+   it times out and is audited as a timeout.
+3. **Three concurrency tests could pass without the fix they claimed to
+   verify.** Two simultaneous review decisions, refreshes, or appointment
+   asks give the same observable result when they happen to run one after
+   the other, because an explicit state check runs before the compare and
+   swap. Repository level tests now exercise each primitive directly: a
+   stale `from_state` loses the compare and swap at the database, a second
+   `revoke_if_active` on one session returns False, and an appointment
+   check blocks behind the advisory lock until the holder commits. The
+   API level tests stay as smoke tests.
+4. **Floor only signals were labeled "AI generated".** The clinician
+   workspace now labels them "Rule based" with "deterministic floor, model
+   unavailable" as provenance.
+5. **Smaller findings:** the Gemini adapter could send a model turn with
+   no parts (the validation retry's assistant message when the model
+   returned nothing), which Gemini rejects; a non ASCII metrics token
+   header would have raised inside `hmac.compare_digest`; the risk signal
+   migration's downgrade would have failed half way on floor only rows and
+   now refuses with a clear message; the test suite now pins the fake
+   provider and lexical embedder regardless of a developer's `.env`; the
+   generated frontend types had drifted (a docstring only), and CI now
+   fails when they are not current.
+
+Residual risks recorded rather than fixed: when two uses of one refresh
+token are truly simultaneous, the loser's family revocation runs before
+the winner's new session commits, so the winner's chain survives (the
+common case, reuse detected later, revokes the whole family); after a
+mutating tool round the remaining model rounds run inside the transaction
+that holds the write; the plain message endpoint now commits the message
+before the reply, so a failure while persisting the reply returns a 500
+for a message that was saved, which a client retry would duplicate until
+the idempotency key lands; the review queue returns at most 100 pending
+items with no paging.
 
 ## Remaining issues, in priority order
 

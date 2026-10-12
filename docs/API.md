@@ -43,7 +43,7 @@ hand written.
 | `/api/v1/auth` | all | login, refresh, me |
 | `/api/v1/conversations` | patient, assigned therapist | conversations, messages (Dira replies to patients) |
 | `/api/v1/knowledge` | org members; ingest is ops only | resource library, grounded ask |
-| `/api/v1/reviews` | therapist | risk review queue and decisions |
+| `/api/v1/reviews` | therapist | risk review queue (newest 100 pending, by severity then age) and decisions |
 | `/api/v1/referrals`, `/api/v1/school/*` | therapist / school staff | referral workflow |
 | `/api/v1/guardian/*` | guardian; share is therapist | portal overview, shared updates |
 | `/api/v1/claims` | therapist, payer staff | eligibility, claims, decisions, history |

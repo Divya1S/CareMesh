@@ -12,8 +12,10 @@ with every finding, its severity, and its status. Seven critical and
 twelve high findings were fixed in fourteen focused commits, each with a
 regression test, and the gate grew type checking, a coverage floor,
 secret scanning, a production build, and dependency audits. Gate at the
-end: 162 backend tests (86 percent coverage, floor 80), mypy clean, 17
-frontend tests, 23 eval cases, production dependency audits clean.
+end: 170 backend tests (86 percent coverage, floor 80), mypy clean, 18
+frontend tests, 23 eval cases, production dependency audits clean, and
+an independent review of the audit's own diff (two confirmed defects in
+the fixes, both corrected with real server tests; see CODEBASE_AUDIT.md).
 
 Before that: the hiring upgrade plan (approved 2026-08-10) completed H1
 through H6 and the spec's final gate (P17), recorded in
@@ -117,7 +119,7 @@ Phase 0 was approved by the human on 2026-08-10 and the approved plan is
 
 ## Done
 
-- 2026-10-12, audit and hardening (gate green: 162 backend tests, 17
+- 2026-10-12, audit and hardening (gate green: 170 backend tests, 18
   frontend, 23 evals, mypy, coverage 86 percent). Critical: the crisis
   phrase floor now runs before the model call and opens review on its own
   when the provider fails (migration d744ccf51ef9 makes
