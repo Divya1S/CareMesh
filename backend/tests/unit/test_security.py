@@ -23,7 +23,7 @@ def make_user() -> User:
 
 def make_service(access_ttl: int = 60) -> JwtTokenService:
     return JwtTokenService(
-        secret="unit-test-secret",
+        secret="unit-test-secret-long-enough-for-hs256-ok",
         algorithm="HS256",
         access_ttl_seconds=access_ttl,
         refresh_ttl_seconds=3600,
@@ -71,14 +71,14 @@ def test_token_for_another_issuer_or_audience_is_rejected():
     service = make_service()
     user = make_user()
     other_issuer = JwtTokenService(
-        secret="unit-test-secret",
+        secret="unit-test-secret-long-enough-for-hs256-ok",
         algorithm="HS256",
         access_ttl_seconds=60,
         refresh_ttl_seconds=3600,
         issuer="someone-else",
     )
     other_audience = JwtTokenService(
-        secret="unit-test-secret",
+        secret="unit-test-secret-long-enough-for-hs256-ok",
         algorithm="HS256",
         access_ttl_seconds=60,
         refresh_ttl_seconds=3600,

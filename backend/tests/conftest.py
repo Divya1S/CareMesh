@@ -31,6 +31,9 @@ os.environ.setdefault("LOGIN_ATTEMPTS_PER_MINUTE", "100000")
 # spends money or depends on the network.
 os.environ["LLM_PROVIDER"] = "fake"
 os.environ["EMBEDDING_PROVIDER"] = "local_lexical"
+# A fixed, long enough signing key so the suite neither depends on nor
+# warns about whatever backend/.env holds.
+os.environ["JWT_SECRET"] = "test-only-signing-key-with-thirty-two-plus-bytes"
 from app.infrastructure.settings import get_settings  # noqa: E402
 
 get_settings.cache_clear()
