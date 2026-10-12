@@ -62,3 +62,9 @@ REVIEW_QUEUE_DEPTH = Gauge(
     "caremesh_review_queue_depth",
     "Risk escalations waiting for a human decision",
 )
+
+RATE_LIMITER_FAILURES = Counter(
+    "caremesh_rate_limiter_failures_total",
+    "Rate limiter store (Redis) failures by scope and the policy applied",
+    ["scope", "policy"],
+)

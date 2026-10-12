@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from redis.asyncio import Redis
 
-from app.api.middleware import CorrelationIdMiddleware
+from app.api.middleware import CorrelationIdMiddleware, SecurityHeadersMiddleware
 from app.api.problems import register_exception_handlers
 from app.api.routes import (
     appointments,
@@ -100,6 +100,7 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
     app.add_middleware(CorrelationIdMiddleware)
+    app.add_middleware(SecurityHeadersMiddleware)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=get_settings().cors_origins,

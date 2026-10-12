@@ -66,6 +66,8 @@ def get_token_service(settings: SettingsDep) -> JwtTokenService:
         algorithm=settings.jwt_algorithm,
         access_ttl_seconds=settings.access_token_ttl_seconds,
         refresh_ttl_seconds=settings.refresh_token_ttl_seconds,
+        issuer=settings.jwt_issuer,
+        audience=settings.jwt_audience,
     )
 
 
@@ -253,9 +255,10 @@ RateLimiterDep = Annotated[RedisRateLimiter, Depends(get_rate_limiter)]
 async def enforce_ai_rate_limit(
     user: CurrentUserDep, limiter: RateLimiterDep, settings: SettingsDep
 ) -> None:
-    """Cost control on endpoints that reach the AI Gateway, per user."""
+    """Cost control on endpoints that reach the AI Gateway, per user. Fails
+    open: a Redis outage must not stop a student from sending a message."""
     decision = await limiter.allow(
-        f"ai:{user.id}", settings.ai_requests_per_minute, window_seconds=60
+        f"ai:{user.id}", settings.ai_requests_per_minute, window_seconds=60, on_failure="open"
     )
     if not decision.allowed:
         raise RateLimitedError(
@@ -267,3 +270,16 @@ async def enforce_ai_rate_limit(
 
 AuthServiceDep = Annotated[AuthService, Depends(get_auth_service)]
 ConversationServiceDep = Annotated[ConversationService, Depends(get_conversation_service)]
+
+
+def client_address(request: Request, settings: Settings) -> str:
+    """The address the login limiter buckets on. Behind a reverse proxy the
+    socket peer is the proxy, so when TRUST_PROXY_HEADERS is on the first
+    X-Forwarded-For entry is used instead. Off by default: trusting that
+    header from the open internet lets a client pick its own bucket."""
+    if settings.trust_proxy_headers:
+        forwarded = request.headers.get("x-forwarded-for", "")
+        first = forwarded.split(",")[0].strip()
+        if first:
+            return first[:64]
+    return request.client.host if request.client else "unknown"

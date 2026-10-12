@@ -42,3 +42,16 @@ class RateLimitedError(AppError):
     def __init__(self, detail: str, retry_after_seconds: int = 60) -> None:
         super().__init__(detail)
         self.retry_after_seconds = retry_after_seconds
+
+
+class ServiceUnavailableError(AppError):
+    """A dependency the request cannot do without is down (for example the
+    rate limiter store behind login). Fail fast, say so, and ask the client
+    to retry."""
+
+    code = "service_unavailable"
+    title = "Service unavailable"
+
+    def __init__(self, detail: str, retry_after_seconds: int = 5) -> None:
+        super().__init__(detail)
+        self.retry_after_seconds = retry_after_seconds

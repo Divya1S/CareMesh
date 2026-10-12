@@ -60,3 +60,34 @@ class CorrelationIdMiddleware:
                 status=status_holder["status"],
                 duration_ms=round(duration * 1000, 1),
             )
+
+
+class SecurityHeadersMiddleware:
+    """Conservative response headers for a JSON API: no sniffing, no
+    framing, no referrer, and no caching of anything under /api (every
+    authenticated response is personal)."""
+
+    def __init__(self, app) -> None:
+        self.app = app
+
+    async def __call__(self, scope, receive, send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        is_api = scope["path"].startswith("/api/")
+
+        async def send_wrapper(message) -> None:
+            if message["type"] == "http.response.start":
+                headers = message.setdefault("headers", [])
+                headers.extend(
+                    [
+                        (b"x-content-type-options", b"nosniff"),
+                        (b"x-frame-options", b"DENY"),
+                        (b"referrer-policy", b"no-referrer"),
+                    ]
+                )
+                if is_api and not any(name == b"cache-control" for name, _ in headers):
+                    headers.append((b"cache-control", b"no-store"))
+            await send(message)
+
+        await self.app(scope, receive, send_wrapper)

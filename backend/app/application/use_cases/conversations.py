@@ -10,11 +10,14 @@ from app.application.ai.tools import Tool, ToolResult
 from app.application.ai.types import LLMMessage, ToolDef
 from app.application.errors import AppError, ForbiddenError, NotFoundError
 from app.application.ports import (
+    AppointmentRequestRepository,
     CareAssignmentRepository,
     ConversationRepository,
     EventOutbox,
     MessageRepository,
+    WorkflowRepository,
 )
+from app.application.use_cases.knowledge import KnowledgeService
 from app.domain.entities import Conversation, Message, Role, SenderType, User
 from app.domain.events import (
     ai_response_generated,
@@ -44,9 +47,9 @@ class ConversationService:
         assignments: CareAssignmentRepository,
         outbox: EventOutbox,
         gateway: AIGateway,
-        knowledge=None,
-        appointments=None,
-        workflows=None,
+        knowledge: KnowledgeService | None = None,
+        appointments: AppointmentRequestRepository | None = None,
+        workflows: WorkflowRepository | None = None,
     ) -> None:
         self._conversations = conversations
         self._messages = messages
@@ -169,12 +172,13 @@ class ConversationService:
     def _dira_tools(self, conversation: Conversation, correlation_id: str | None) -> list[Tool]:
         """Dira's allow listed tools (ADR 0007). Handlers carry the
         conversation's authorization context; the model only picks."""
-        if self._knowledge is None or self._appointments is None:
+        knowledge, appointments, workflows = self._knowledge, self._appointments, self._workflows
+        if knowledge is None or appointments is None or workflows is None:
             return []
 
         async def search_resources(arguments: dict) -> ToolResult:
             query = str(arguments.get("query", ""))[:200]
-            chunks = await self._knowledge.retrieve(conversation.organization_id, query)
+            chunks = await knowledge.retrieve(conversation.organization_id, query)
             results = [
                 {
                     "title": c.document_title,
@@ -193,7 +197,7 @@ class ConversationService:
             # Idempotent per conversation: a model asking repeatedly (or a
             # steered model asking many times in one turn) creates at most
             # one open request for the care team.
-            if await self._appointments.has_open_for_conversation(
+            if await appointments.has_open_for_conversation(
                 conversation.id, AppointmentRequestState.REQUESTED.value
             ):
                 return ToolResult(
@@ -207,7 +211,7 @@ class ConversationService:
             now = datetime.now(UTC)
             request_id = uuid7()
             workflow_id = uuid7()
-            await self._workflows.create(
+            await workflows.create(
                 workflow_id=workflow_id,
                 organization_id=conversation.organization_id,
                 workflow_type=WorkflowType.APPOINTMENT_REQUEST,
@@ -217,7 +221,7 @@ class ConversationService:
                 reason="requested through Dira",
                 now=now,
             )
-            await self._appointments.add(
+            await appointments.add(
                 request_id=request_id,
                 organization_id=conversation.organization_id,
                 patient_id=conversation.patient_id,
@@ -295,6 +299,7 @@ class ConversationService:
     async def _persist_dira_reply(
         self, conversation: Conversation, result, correlation_id: str | None
     ) -> Message:
+        ai_request_id = UUID(result.ai_request_id)
         reply = Message(
             id=uuid7(),
             conversation_id=conversation.id,
@@ -302,7 +307,7 @@ class ConversationService:
             sender_id=None,
             content=result.text,
             created_at=datetime.now(UTC),
-            ai_request_id=UUID(result.ai_request_id),
+            ai_request_id=ai_request_id,
             simulated=result.simulated,
         )
         await self._messages.add(reply)
@@ -310,7 +315,7 @@ class ConversationService:
             ai_response_generated(
                 message_id=reply.id,
                 conversation_id=conversation.id,
-                ai_request_id=reply.ai_request_id,
+                ai_request_id=ai_request_id,
                 simulated=result.simulated,
                 organization_id=conversation.organization_id,
                 occurred_at=reply.created_at,

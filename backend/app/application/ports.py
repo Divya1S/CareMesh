@@ -13,6 +13,7 @@ from app.domain.entities import (
     User,
 )
 from app.domain.events import DomainEvent
+from app.domain.workflows import WorkflowType
 
 
 class UserRepository(Protocol):
@@ -95,3 +96,36 @@ class TokenService(Protocol):
     def create_refresh_token(self, user: User, session_id: UUID) -> str: ...
     def decode(self, token: str, expected_type: str) -> dict: ...
     def token_hash(self, token: str) -> str: ...
+
+
+class WorkflowRepository(Protocol):
+    """The subset of the workflow repository that use cases creating
+    workflows depend on."""
+
+    async def create(
+        self,
+        *,
+        workflow_id: UUID,
+        organization_id: UUID,
+        workflow_type: WorkflowType,
+        state: str,
+        subject_id: UUID,
+        correlation_id: str | None,
+        reason: str,
+        now: datetime,
+    ) -> None: ...
+
+
+class AppointmentRequestRepository(Protocol):
+    async def add(
+        self,
+        *,
+        request_id: UUID,
+        organization_id: UUID,
+        patient_id: UUID,
+        conversation_id: UUID | None,
+        workflow_id: UUID,
+        note: str,
+        created_at: datetime,
+    ) -> None: ...
+    async def has_open_for_conversation(self, conversation_id: UUID, state: str) -> bool: ...

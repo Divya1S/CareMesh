@@ -33,11 +33,15 @@ class JwtTokenService:
         algorithm: str,
         access_ttl_seconds: int,
         refresh_ttl_seconds: int,
+        issuer: str = "caremesh",
+        audience: str = "caremesh-api",
     ) -> None:
         self._secret = secret
         self._algorithm = algorithm
         self._access_ttl = access_ttl_seconds
         self._refresh_ttl = refresh_ttl_seconds
+        self._issuer = issuer
+        self._audience = audience
 
     def create_access_token(self, user: User) -> str:
         return self._encode(
@@ -58,7 +62,15 @@ class JwtTokenService:
 
     def decode(self, token: str, expected_type: str) -> dict:
         try:
-            claims = jwt.decode(token, self._secret, algorithms=[self._algorithm])
+            # Issuer and audience are verified so a token minted by another
+            # service sharing the key (or for another audience) is refused.
+            claims = jwt.decode(
+                token,
+                self._secret,
+                algorithms=[self._algorithm],
+                issuer=self._issuer,
+                audience=self._audience,
+            )
         except jwt.PyJWTError as exc:
             raise UnauthorizedError("Invalid or expired token") from exc
         if claims.get("type") != expected_type:
@@ -70,5 +82,11 @@ class JwtTokenService:
 
     def _encode(self, claims: dict, ttl_seconds: int) -> str:
         now = datetime.now(UTC)
-        payload = {**claims, "iat": now, "exp": now + timedelta(seconds=ttl_seconds)}
+        payload = {
+            **claims,
+            "iss": self._issuer,
+            "aud": self._audience,
+            "iat": now,
+            "exp": now + timedelta(seconds=ttl_seconds),
+        }
         return jwt.encode(payload, self._secret, algorithm=self._algorithm)

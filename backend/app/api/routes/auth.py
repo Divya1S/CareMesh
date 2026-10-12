@@ -1,6 +1,12 @@
 from fastapi import APIRouter, Request
 
-from app.api.deps import AuthServiceDep, CurrentUserDep, RateLimiterDep, SettingsDep
+from app.api.deps import (
+    AuthServiceDep,
+    CurrentUserDep,
+    RateLimiterDep,
+    SettingsDep,
+    client_address,
+)
 from app.api.schemas import LoginRequest, MeResponse, RefreshRequest, TokenPairResponse
 from app.application.errors import RateLimitedError
 
@@ -19,10 +25,11 @@ async def login(
     # accounts from one address hits the address limit and spraying one
     # account from many addresses hits the account limit. A single
     # composite key would enforce neither.
-    client = request.client.host if request.client else "unknown"
+    client = client_address(request, settings)
     for bucket in (f"login:addr:{client}", f"login:acct:{body.email.lower()}"):
+        # Fails closed: no Redis, no password guessing.
         decision = await limiter.allow(
-            bucket, settings.login_attempts_per_minute, window_seconds=60
+            bucket, settings.login_attempts_per_minute, window_seconds=60, on_failure="closed"
         )
         if not decision.allowed:
             raise RateLimitedError(
@@ -38,7 +45,26 @@ async def login(
 
 
 @router.post("/refresh", response_model=TokenPairResponse)
-async def refresh(body: RefreshRequest, auth: AuthServiceDep) -> TokenPairResponse:
+async def refresh(
+    body: RefreshRequest,
+    request: Request,
+    auth: AuthServiceDep,
+    limiter: RateLimiterDep,
+    settings: SettingsDep,
+) -> TokenPairResponse:
+    # Refresh tokens are guessable in theory only, but an unlimited
+    # endpoint is still an oracle; the per address login bucket covers it.
+    decision = await limiter.allow(
+        f"login:addr:{client_address(request, settings)}",
+        settings.login_attempts_per_minute,
+        window_seconds=60,
+        on_failure="closed",
+    )
+    if not decision.allowed:
+        raise RateLimitedError(
+            "Too many sign in attempts. Wait a minute and try again.",
+            retry_after_seconds=decision.retry_after_seconds,
+        )
     pair = await auth.refresh(body.refresh_token)
     return TokenPairResponse(
         access_token=pair.access_token,

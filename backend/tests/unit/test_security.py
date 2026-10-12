@@ -65,3 +65,37 @@ def test_tampered_token_rejected():
     token = service.create_access_token(make_user())
     with pytest.raises(UnauthorizedError):
         service.decode(token[:-2] + "xx", expected_type="access")
+
+
+def test_token_for_another_issuer_or_audience_is_rejected():
+    service = make_service()
+    user = make_user()
+    other_issuer = JwtTokenService(
+        secret="unit-test-secret",
+        algorithm="HS256",
+        access_ttl_seconds=60,
+        refresh_ttl_seconds=3600,
+        issuer="someone-else",
+    )
+    other_audience = JwtTokenService(
+        secret="unit-test-secret",
+        algorithm="HS256",
+        access_ttl_seconds=60,
+        refresh_ttl_seconds=3600,
+        audience="another-api",
+    )
+    with pytest.raises(UnauthorizedError):
+        service.decode(other_issuer.create_access_token(user), expected_type="access")
+    with pytest.raises(UnauthorizedError):
+        service.decode(other_audience.create_access_token(user), expected_type="access")
+
+
+def test_settings_refuse_a_weak_jwt_secret_outside_dev():
+    from app.infrastructure.settings import Settings
+
+    Settings(environment="dev").validate_for_environment()
+    with pytest.raises(RuntimeError, match="32 bytes"):
+        Settings(environment="prod", jwt_secret="short").validate_for_environment()
+    with pytest.raises(RuntimeError):
+        Settings(environment="prod").validate_for_environment()
+    Settings(environment="prod", jwt_secret="x" * 32).validate_for_environment()

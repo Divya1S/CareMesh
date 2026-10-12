@@ -14,7 +14,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
-from app.application.ai.gateway import AIGateway
+from app.application.ai.gateway import AIGateway, AIProviderError
 from app.application.ai.types import LLMMessage
 from app.application.errors import DomainValidationError, ForbiddenError
 from app.domain.entities import Role, User
@@ -188,8 +188,13 @@ class KnowledgeService:
             correlation_id=correlation_id,
             response_schema=KnowledgeAnswerDraft,
         )
-        draft: KnowledgeAnswerDraft = result.structured
-        cited = set(draft.cited_chunk_ids)
+        draft = result.structured
+        if not isinstance(draft, KnowledgeAnswerDraft):
+            raise AIProviderError("knowledge_answer returned no structured output")
+        # Only ids that were actually offered count as citations; a model
+        # naming an id it never saw must not be shown as a source.
+        offered = {str(item.chunk.id) for item in top}
+        cited = {chunk_id for chunk_id in draft.cited_chunk_ids if chunk_id in offered}
         citations = [
             Citation(
                 chunk_id=item.chunk.id,

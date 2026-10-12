@@ -5,6 +5,7 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
+from app.application.ai.gateway import AIProviderError, AITimeoutError, AIValidationError
 from app.application.errors import (
     AppError,
     ConflictError,
@@ -12,6 +13,7 @@ from app.application.errors import (
     ForbiddenError,
     NotFoundError,
     RateLimitedError,
+    ServiceUnavailableError,
     UnauthorizedError,
 )
 from app.domain.workflows import InvalidTransitionError
@@ -23,6 +25,12 @@ _STATUS_BY_ERROR: dict[type[AppError], int] = {
     ConflictError: 409,
     DomainValidationError: 422,
     RateLimitedError: 429,
+    ServiceUnavailableError: 503,
+    # The model is an upstream dependency: its failures are gateway errors,
+    # never "internal server error".
+    AIProviderError: 502,
+    AIValidationError: 502,
+    AITimeoutError: 504,
 }
 
 logger = structlog.get_logger()
@@ -49,7 +57,7 @@ def register_exception_handlers(app: FastAPI) -> None:
         response = _problem(request, status, exc.code, exc.title, exc.detail)
         if status == 401:
             response.headers["WWW-Authenticate"] = "Bearer"
-        if isinstance(exc, RateLimitedError):
+        if isinstance(exc, RateLimitedError | ServiceUnavailableError):
             response.headers["Retry-After"] = str(exc.retry_after_seconds)
         return response
 

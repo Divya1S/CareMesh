@@ -53,15 +53,26 @@ class Settings(BaseSettings):
     consumer_max_attempts: int = 3
 
     # The dev default is intentionally not a secret. Anything but dev fails
-    # closed at startup if this value is still in place.
-    jwt_secret: str = "dev-only-not-a-secret"
+    # closed at startup if this value is still in place or is too short
+    # for HS256 (32 bytes, RFC 7518 section 3.2).
+    jwt_secret: str = "dev-only-not-a-secret-never-use-outside-dev"
     jwt_algorithm: str = "HS256"
+    jwt_issuer: str = "caremesh"
+    jwt_audience: str = "caremesh-api"
     access_token_ttl_seconds: int = 900
     refresh_token_ttl_seconds: int = 604800
 
+    # Behind a reverse proxy the socket peer is the proxy; turn this on
+    # only when the proxy sets X-Forwarded-For and strips client copies.
+    trust_proxy_headers: bool = False
+    # When set, /metrics requires this bearer token.
+    metrics_token: str | None = None
+
     def validate_for_environment(self) -> None:
-        if self.environment != "dev" and self.jwt_secret == "dev-only-not-a-secret":
-            raise RuntimeError("JWT_SECRET must be set outside dev")
+        if self.environment == "dev":
+            return
+        if self.jwt_secret.startswith("dev-only") or len(self.jwt_secret.encode()) < 32:
+            raise RuntimeError("JWT_SECRET must be set to at least 32 bytes outside dev")
 
 
 @lru_cache
