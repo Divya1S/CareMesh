@@ -93,9 +93,11 @@ def test_token_for_another_issuer_or_audience_is_rejected():
 def test_settings_refuse_a_weak_jwt_secret_outside_dev():
     from app.infrastructure.settings import Settings
 
-    Settings(environment="dev").validate_for_environment()
+    dev_default = Settings.model_fields["jwt_secret"].default
+    Settings(environment="dev", jwt_secret=dev_default).validate_for_environment()
     with pytest.raises(RuntimeError, match="32 bytes"):
         Settings(environment="prod", jwt_secret="short").validate_for_environment()
+    # The shipped dev value is refused outside dev even though it is long.
     with pytest.raises(RuntimeError):
-        Settings(environment="prod").validate_for_environment()
+        Settings(environment="prod", jwt_secret=dev_default).validate_for_environment()
     Settings(environment="prod", jwt_secret="x" * 32).validate_for_environment()
