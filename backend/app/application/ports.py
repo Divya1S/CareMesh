@@ -46,9 +46,13 @@ class ConversationRepository(Protocol):
 
 class MessageRepository(Protocol):
     async def add(self, message: Message) -> None: ...
+    async def get_by_id(self, message_id: UUID) -> Message | None: ...
     async def list_for_conversation(
-        self, conversation_id: UUID, limit: int, offset: int
+        self, conversation_id: UUID, limit: int, offset: int, newest_first: bool = False
     ) -> list[Message]: ...
+    async def latest_for_conversation(self, conversation_id: UUID, limit: int) -> list[Message]:
+        """The newest `limit` messages in chronological order."""
+        ...
 
 
 class CareAssignmentRepository(Protocol):

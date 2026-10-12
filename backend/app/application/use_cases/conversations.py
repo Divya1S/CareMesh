@@ -94,11 +94,18 @@ class ConversationService:
         return conversation
 
     async def list_messages(
-        self, actor: User, conversation_id: UUID, limit: int, offset: int
+        self,
+        actor: User,
+        conversation_id: UUID,
+        limit: int,
+        offset: int,
+        newest_first: bool = False,
     ) -> list[Message]:
         await self.get_conversation(actor, conversation_id)
         limit, offset = _clamp_page(limit, offset)
-        return await self._messages.list_for_conversation(conversation_id, limit, offset)
+        return await self._messages.list_for_conversation(
+            conversation_id, limit, offset, newest_first=newest_first
+        )
 
     async def post_message(
         self,
@@ -142,9 +149,15 @@ class ConversationService:
         return message
 
     async def _build_history(self, conversation: Conversation) -> list[LLMMessage]:
-        history = await self._messages.list_for_conversation(conversation.id, 100, 0)
+        # Newest messages first from the database, then chronological. A
+        # fixed page from the start of the conversation would go stale once
+        # it outgrew the page, and Dira (and the crisis tool guard) would
+        # stop seeing what the student just said.
+        history = await self._messages.latest_for_conversation(
+            conversation.id, DIRA_MEMORY_MESSAGES
+        )
         llm_messages: list[LLMMessage] = []
-        for m in history[-DIRA_MEMORY_MESSAGES:]:
+        for m in history:
             if m.sender_type is SenderType.DIRA:
                 llm_messages.append(LLMMessage("assistant", m.content))
             elif m.sender_type is SenderType.CLINICIAN:

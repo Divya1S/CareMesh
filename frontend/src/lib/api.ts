@@ -108,8 +108,14 @@ export const createConversation = (title: string) =>
     body: JSON.stringify({ title }),
   });
 
-export const listMessages = (conversationId: string) =>
-  request<Message[]>(`/api/v1/conversations/${conversationId}/messages?limit=100`);
+/** The newest page of a conversation, in chronological order. Loading
+ * from the start would go stale once a conversation outgrew one page. */
+export const listMessages = async (conversationId: string): Promise<Message[]> => {
+  const newest = await request<Message[]>(
+    `/api/v1/conversations/${conversationId}/messages?order=desc&limit=100`,
+  );
+  return newest.reverse();
+};
 
 export const listReviews = () => request<ReviewItem[]>("/api/v1/reviews");
 

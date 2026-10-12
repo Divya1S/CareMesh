@@ -114,7 +114,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List Messages */
+        /**
+         * List Messages
+         * @description Messages in chronological order by default. order=desc returns the
+         *     newest page first, which is what a chat view should load.
+         */
         get: operations["list_messages_api_v1_conversations__conversation_id__messages_get"];
         put?: never;
         /** Post Message */
@@ -1394,6 +1398,7 @@ export interface operations {
             query?: {
                 limit?: number;
                 offset?: number;
+                order?: "asc" | "desc";
             };
             header?: never;
             path: {

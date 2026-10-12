@@ -1,4 +1,5 @@
 import json
+from typing import Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
@@ -75,8 +76,14 @@ async def list_messages(
     service: ConversationServiceDep,
     limit: int = Query(default=50, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
+    order: Literal["asc", "desc"] = Query(default="asc"),
 ) -> list[MessageResponse]:
-    return [_message(m) for m in await service.list_messages(user, conversation_id, limit, offset)]
+    """Messages in chronological order by default. order=desc returns the
+    newest page first, which is what a chat view should load."""
+    messages = await service.list_messages(
+        user, conversation_id, limit, offset, newest_first=order == "desc"
+    )
+    return [_message(m) for m in messages]
 
 
 @router.post(

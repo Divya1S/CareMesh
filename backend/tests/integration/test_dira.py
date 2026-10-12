@@ -1,6 +1,8 @@
 """Dira reply flow (S5): patient messages get a simulated, labeled reply
 through the gateway; failures never block the patient's message."""
 
+from uuid import UUID
+
 import pytest
 from sqlalchemy import select
 
@@ -97,3 +99,73 @@ async def test_ai_failure_never_blocks_the_patient_message(client, app, seeded, 
         ai_rows = (await session.scalars(select(AIRequestRow))).all()
     assert len(ai_rows) == 1
     assert ai_rows[0].status == "provider_error", "the failure must still be audited"
+
+
+async def test_dira_memory_tracks_a_long_conversation(client, app, seeded, auth_header):
+    """Past the old 100 message page, history must still end with the
+    newest message, otherwise Dira replies to stale context and the crisis
+    tool guard inspects an old turn."""
+    from datetime import UTC, datetime, timedelta
+
+    from app.application.ai.gateway import AIGateway
+    from app.application.use_cases.conversations import (
+        DIRA_MEMORY_MESSAGES,
+        ConversationService,
+    )
+    from app.domain.entities import Message, SenderType
+    from app.domain.ids import uuid7
+    from app.infrastructure.ai.fake_provider import FakeLLMProvider
+    from app.infrastructure.repositories import (
+        SqlAIRequestLog,
+        SqlCareAssignmentRepository,
+        SqlConversationRepository,
+        SqlEventOutbox,
+        SqlMessageRepository,
+    )
+
+    patient = await auth_header("patient@a.caremesh.org")
+    conversation_id = (
+        await client.post("/api/v1/conversations", json={"title": "long"}, headers=patient)
+    ).json()["id"]
+
+    start = datetime.now(UTC) - timedelta(hours=3)
+    async with app.state.session_factory() as session:
+        messages = SqlMessageRepository(session)
+        for i in range(130):
+            await messages.add(
+                Message(
+                    id=uuid7(),
+                    conversation_id=UUID(conversation_id),
+                    sender_type=SenderType.PATIENT if i % 2 == 0 else SenderType.DIRA,
+                    sender_id=seeded["patient"].id if i % 2 == 0 else None,
+                    content=f"message {i}",
+                    created_at=start + timedelta(seconds=i),
+                )
+            )
+        await session.commit()
+
+    async with app.state.session_factory() as session:
+        service = ConversationService(
+            conversations=SqlConversationRepository(session),
+            messages=SqlMessageRepository(session),
+            assignments=SqlCareAssignmentRepository(session),
+            outbox=SqlEventOutbox(session),
+            gateway=AIGateway(
+                FakeLLMProvider(), SqlAIRequestLog(app.state.session_factory), timeout_seconds=5
+            ),
+        )
+        conversation = await SqlConversationRepository(session).get_by_id(UUID(conversation_id))
+        history = await service._build_history(conversation)
+
+    assert len(history) == DIRA_MEMORY_MESSAGES
+    assert history[-1].content == "message 129"
+    assert history[0].content == f"message {130 - DIRA_MEMORY_MESSAGES}"
+
+    # The API can serve the newest page too, which is what the chat loads.
+    newest = (
+        await client.get(
+            f"/api/v1/conversations/{conversation_id}/messages?order=desc&limit=5",
+            headers=patient,
+        )
+    ).json()
+    assert [m["content"] for m in newest] == [f"message {i}" for i in range(129, 124, -1)]

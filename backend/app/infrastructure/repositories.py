@@ -255,16 +255,30 @@ class SqlMessageRepository:
         return _message(row) if row else None
 
     async def list_for_conversation(
-        self, conversation_id: UUID, limit: int, offset: int
+        self, conversation_id: UUID, limit: int, offset: int, newest_first: bool = False
     ) -> list[Message]:
+        # Ties on created_at break on id (UUIDv7, time ordered) so paging
+        # is stable.
+        order = (
+            (MessageRow.created_at.desc(), MessageRow.id.desc())
+            if newest_first
+            else (MessageRow.created_at.asc(), MessageRow.id.asc())
+        )
         rows = await self._session.scalars(
             select(MessageRow)
             .where(MessageRow.conversation_id == conversation_id)
-            .order_by(MessageRow.created_at.asc())
+            .order_by(*order)
             .limit(limit)
             .offset(offset)
         )
         return [_message(r) for r in rows]
+
+    async def latest_for_conversation(self, conversation_id: UUID, limit: int) -> list[Message]:
+        """The newest messages, returned oldest to newest. Dira's memory
+        reads this, so a long conversation always shows it the latest
+        turn."""
+        newest = await self.list_for_conversation(conversation_id, limit, 0, newest_first=True)
+        return list(reversed(newest))
 
 
 class SqlEventOutbox:
