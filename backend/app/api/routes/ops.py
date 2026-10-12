@@ -32,8 +32,8 @@ def _workflow(w) -> OpsWorkflowResponse:
     )
 
 
-def _ai_request(row, detail: bool = False) -> OpsAIRequestResponse:
-    base = {
+def _ai_request_fields(row) -> dict:
+    return {
         "id": row.id,
         "provider": row.provider,
         "model": row.model,
@@ -50,11 +50,18 @@ def _ai_request(row, detail: bool = False) -> OpsAIRequestResponse:
         "error_type": row.error_type,
         "created_at": row.created_at,
     }
-    if detail:
-        return OpsAIRequestDetailResponse(
-            **base, request_messages=row.request_messages, response_text=row.response_text
-        )
-    return OpsAIRequestResponse(**base)
+
+
+def _ai_request(row) -> OpsAIRequestResponse:
+    return OpsAIRequestResponse(**_ai_request_fields(row))
+
+
+def _ai_request_detail(row) -> OpsAIRequestDetailResponse:
+    return OpsAIRequestDetailResponse(
+        **_ai_request_fields(row),
+        request_messages=row.request_messages,
+        response_text=row.response_text,
+    )
 
 
 @router.get("/workflows", response_model=list[OpsWorkflowResponse])
@@ -100,7 +107,7 @@ async def list_ai_requests(
 async def ai_request_detail(
     request_id: UUID, user: CurrentUserDep, service: OpsServiceDep
 ) -> OpsAIRequestDetailResponse:
-    return _ai_request(await service.ai_request_detail(user, request_id), detail=True)
+    return _ai_request_detail(await service.ai_request_detail(user, request_id))
 
 
 @router.get("/events", response_model=list[OpsEventResponse])

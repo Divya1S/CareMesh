@@ -23,6 +23,7 @@ from app.domain.knowledge import Document, DocumentChunk, DocumentStatus, Retrie
 from app.domain.risk import RiskReview, RiskSignal
 from app.domain.workflows import WorkflowInstance, WorkflowTransition, WorkflowType
 from app.infrastructure import metrics
+from app.infrastructure.db import affected_rows
 from app.infrastructure.models import (
     AIRequestRow,
     AppointmentRequestRow,
@@ -183,7 +184,7 @@ class SqlAuthSessionRepository:
             .where(AuthSessionRow.id == session_id, AuthSessionRow.revoked_at.is_(None))
             .values(revoked_at=revoked_at)
         )
-        return result.rowcount == 1
+        return affected_rows(result) == 1
 
 
 class SqlSessionRevoker:
@@ -201,7 +202,7 @@ class SqlSessionRevoker:
                 .values(revoked_at=revoked_at)
             )
             await session.commit()
-            return result.rowcount
+            return affected_rows(result)
 
 
 class SqlConversationRepository:
@@ -537,7 +538,7 @@ class SqlWorkflowRepository:
             .where(WorkflowInstanceRow.id == workflow_id, WorkflowInstanceRow.state == from_state)
             .values(state=to_state, updated_at=now)
         )
-        if result.rowcount != 1:
+        if affected_rows(result) != 1:
             raise ConflictError(
                 f"This workflow is no longer in state {from_state}; someone else moved it first"
             )

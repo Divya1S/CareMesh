@@ -1,0 +1,16 @@
+title = "CareMesh gitleaks config"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Known non secrets: the dev only defaults and lockfiles"
+regexes = [
+  "dev-only-not-a-secret",
+  "caremesh_dev_password",
+  "caremesh-demo",
+]
+paths = [
+  "frontend/package-lock.json",
+  "backend/uv.lock",
+]

@@ -1,5 +1,8 @@
 """Async SQLAlchemy engine and session factory."""
 
+from typing import Any, cast
+
+from sqlalchemy.engine import CursorResult, Result
 from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker, create_async_engine
 
 
@@ -24,3 +27,9 @@ def create_engine(
 
 def create_session_factory(engine: AsyncEngine) -> async_sessionmaker:
     return async_sessionmaker(engine, expire_on_commit=False)
+
+
+def affected_rows(result: Result[Any]) -> int:
+    """Rows changed by an UPDATE or INSERT. AsyncSession.execute is typed
+    as a generic Result; at runtime a DML statement returns a CursorResult."""
+    return cast(CursorResult[Any], result).rowcount

@@ -89,9 +89,12 @@ def _transcript(messages: Sequence[LLMMessage]) -> list[dict]:
 
 
 def _short_validation_error(exc: ValidationError) -> str:
-    first = exc.errors()[0] if exc.errors() else {}
-    location = ".".join(str(part) for part in first.get("loc", ())) or "output"
-    return f"{location}: {first.get('msg', 'invalid')}"[:200]
+    errors = exc.errors()
+    if not errors:
+        return "output: invalid"
+    first = errors[0]
+    location = ".".join(str(part) for part in first["loc"]) or "output"
+    return f"{location}: {first['msg']}"[:200]
 
 
 class AIGateway:

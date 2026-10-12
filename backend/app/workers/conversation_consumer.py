@@ -39,7 +39,7 @@ from app.application.use_cases.risk_analysis import (
 )
 from app.domain.events import PATIENT_MESSAGE_CREATED
 from app.infrastructure.ai.factory import create_provider
-from app.infrastructure.db import create_engine, create_session_factory
+from app.infrastructure.db import affected_rows, create_engine, create_session_factory
 from app.infrastructure.events.kafka import create_consumer, create_producer
 from app.infrastructure.events.schemas import EventEnvelope, dlq_topic_for, topic_for
 from app.infrastructure.logging import configure_logging
@@ -82,7 +82,7 @@ async def _mark_processed(session: AsyncSession, envelope: EventEnvelope) -> boo
         )
         .on_conflict_do_nothing(index_elements=["consumer_group", "event_id"])
     )
-    return result.rowcount == 1
+    return affected_rows(result) == 1
 
 
 def _needs_risk_analysis(envelope: EventEnvelope) -> bool:

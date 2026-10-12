@@ -12,11 +12,14 @@ docker compose up -d --wait
 echo "==> backend: lint"
 (cd backend && uv run ruff check . && uv run ruff format --check .)
 
+echo "==> backend: type check"
+(cd backend && uv run mypy)
+
 echo "==> backend: migrations apply cleanly to the dev database"
 (cd backend && uv run alembic upgrade head)
 
-echo "==> backend: tests (unit + integration)"
-(cd backend && uv run pytest -q)
+echo "==> backend: tests (unit + integration) with the coverage floor"
+(cd backend && uv run pytest -q --cov --cov-report=term:skip-covered)
 
 if [ -d frontend ]; then
   echo "==> frontend: lint, typecheck, tests"
