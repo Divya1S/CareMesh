@@ -1,6 +1,7 @@
 """Conversation and message use cases with resource level authorization."""
 
 import json
+from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from uuid import UUID
 
@@ -50,6 +51,7 @@ class ConversationService:
         knowledge: KnowledgeService | None = None,
         appointments: AppointmentRequestRepository | None = None,
         workflows: WorkflowRepository | None = None,
+        release: Callable[[], Awaitable[None]] | None = None,
     ) -> None:
         self._conversations = conversations
         self._messages = messages
@@ -59,6 +61,10 @@ class ConversationService:
         self._knowledge = knowledge
         self._appointments = appointments
         self._workflows = workflows
+        # Commits the unit of work so far and releases its connection. Called
+        # right before a model call: a provider that takes seconds must not
+        # pin a pooled connection or hold an open transaction meanwhile.
+        self._release = release
 
     async def create_conversation(self, actor: User, title: str) -> Conversation:
         authz.ensure_can_create_conversation(actor)
@@ -333,17 +339,23 @@ class ConversationService:
         gateway failures are swallowed here; the gateway has already audited
         them in ai_requests."""
         llm_messages = await self._build_history(conversation)
+        tools = self._tools_for_turn(conversation, correlation_id, llm_messages)
+        await self._release_before_model_call()
         try:
             result = await self._gateway.complete(
                 prompt_name="dira_reply",
                 user_messages=llm_messages,
                 organization_id=conversation.organization_id,
                 correlation_id=correlation_id,
-                tools=self._tools_for_turn(conversation, correlation_id, llm_messages),
+                tools=tools,
             )
         except AppError:
             return None
         return await self._persist_dira_reply(conversation, result, correlation_id)
+
+    async def _release_before_model_call(self) -> None:
+        if self._release is not None:
+            await self._release()
 
     async def stream_dira_reply(self, actor: User, conversation_id: UUID, correlation_id):
         """Streaming variant: yields tool, delta, and message events. The
@@ -354,6 +366,8 @@ class ConversationService:
         if actor.role is not Role.PATIENT or conversation.patient_id != actor.id:
             raise ForbiddenError("Only the conversation's patient talks with Dira")
         llm_messages = await self._build_history(conversation)
+        tools = self._tools_for_turn(conversation, correlation_id, llm_messages)
+        await self._release_before_model_call()
         result = None
         try:
             async for event in self._gateway.stream_reply(
@@ -361,7 +375,7 @@ class ConversationService:
                 user_messages=llm_messages,
                 organization_id=conversation.organization_id,
                 correlation_id=correlation_id,
-                tools=self._tools_for_turn(conversation, correlation_id, llm_messages),
+                tools=tools,
             ):
                 if event["type"] == "result":
                     result = event["result"]

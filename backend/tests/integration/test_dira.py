@@ -169,3 +169,75 @@ async def test_dira_memory_tracks_a_long_conversation(client, app, seeded, auth_
         )
     ).json()
     assert [m["content"] for m in newest] == [f"message {i}" for i in range(129, 124, -1)]
+
+
+class TransactionProbeProvider:
+    """A provider that, while "thinking", counts sessions on the test
+    database that sit idle inside an open transaction. The request's own
+    session must not be one of them."""
+
+    name = "fake"
+    model_name = "fake-sim-1"
+    simulated = True
+
+    def __init__(self, session_factory) -> None:
+        from app.infrastructure.ai.fake_provider import FakeLLMProvider
+
+        self._inner = FakeLLMProvider()
+        self._factory = session_factory
+        self.idle_in_transaction: list[int] = []
+
+    async def _probe(self) -> None:
+        from sqlalchemy import text
+
+        async with self._factory() as session:
+            count = await session.scalar(
+                text(
+                    "SELECT count(*) FROM pg_stat_activity "
+                    "WHERE datname = current_database() "
+                    "AND state = 'idle in transaction'"
+                )
+            )
+            await session.rollback()
+        self.idle_in_transaction.append(int(count or 0))
+
+    async def complete(self, request):
+        await self._probe()
+        return await self._inner.complete(request)
+
+    async def stream(self, request):
+        await self._probe()
+        async for item in self._inner.stream(request):
+            yield item
+
+
+async def test_model_calls_hold_no_open_transaction(client, app, seeded, auth_header):
+    """Both reply paths release the request's connection before calling
+    the model; a slow provider must not pin the pool."""
+    from app.application.ai.gateway import AIGateway
+    from app.infrastructure.repositories import SqlAIRequestLog
+
+    probe = TransactionProbeProvider(app.state.audit_session_factory)
+    app.state.gateway = AIGateway(
+        probe, SqlAIRequestLog(app.state.audit_session_factory), timeout_seconds=5.0
+    )
+    patient = await auth_header("patient@a.caremesh.org")
+    conversation_id = (
+        await client.post("/api/v1/conversations", json={"title": "t"}, headers=patient)
+    ).json()["id"]
+
+    posted = await client.post(
+        f"/api/v1/conversations/{conversation_id}/messages",
+        json={"content": "hello there"},
+        headers=patient,
+    )
+    assert posted.status_code == 201
+    async with client.stream(
+        "POST",
+        f"/api/v1/conversations/{conversation_id}/messages/stream",
+        json={"content": "and again"},
+        headers=patient,
+    ) as response:
+        async for _ in response.aiter_lines():
+            pass
+    assert probe.idle_in_transaction == [0, 0]

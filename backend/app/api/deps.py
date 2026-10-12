@@ -133,6 +133,7 @@ def get_conversation_service(
         ),
         appointments=SqlAppointmentRepository(session),
         workflows=SqlWorkflowRepository(session),
+        release=session.commit,
     )
 
 

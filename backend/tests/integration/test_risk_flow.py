@@ -457,3 +457,14 @@ async def test_review_queue_runs_a_fixed_number_of_queries(client, app, seeded, 
     assert len(queue) == 3
     # Current user, assignments, and the joined queue query.
     assert len(statements) <= 3, statements
+
+
+async def test_risk_classification_holds_no_open_transaction(client, app, seeded, auth_header):
+    """The consumer calls the model between two short transactions, never
+    inside one."""
+    from tests.integration.test_dira import TransactionProbeProvider
+
+    probe = TransactionProbeProvider(app.state.audit_session_factory)
+    envelope = await post_and_get_envelope(client, app, auth_header, "hello there friend")
+    assert await run_consumer(app, envelope, gateway_with(app, probe)) == "processed"
+    assert probe.idle_in_transaction == [0]
