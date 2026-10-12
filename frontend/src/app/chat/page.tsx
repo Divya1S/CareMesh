@@ -8,6 +8,7 @@ import { ChatBubble, type BubbleSender } from "@/components/ui/ChatBubble";
 import { Chip } from "@/components/ui/Chip";
 import { EmptyState } from "@/components/ui/EmptyState";
 import {
+  ApiError,
   createConversation,
   getMe,
   listConversations,
@@ -42,7 +43,12 @@ export default function ChatPage() {
   // direction; the badge is never asserted from nothing.
   const [streamSimulated, setStreamSimulated] = useState(true);
   const [loaded, setLoaded] = useState(false);
+  const [sendError, setSendError] = useState<string | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
+  // The in flight stream; aborted on a new send and when the page unmounts.
+  const streamAbort = useRef<AbortController | null>(null);
+
+  useEffect(() => () => streamAbort.current?.abort(), []);
 
   const refreshMessages = useCallback(async (conversationId: string) => {
     setMessages(await listMessages(conversationId));
@@ -94,10 +100,14 @@ export default function ChatPage() {
     event.preventDefault();
     if (!draft.trim() || !selectedId) return;
     setBusy(true);
+    setSendError(null);
     setStreamText("");
     setToolLines([]);
     setStreamSimulated(true);
     setStreamingActive(true);
+    streamAbort.current?.abort();
+    const controller = new AbortController();
+    streamAbort.current = controller;
     try {
       await streamMessage(selectedId, draft.trim(), (streamEvent) => {
         if (streamEvent.type === "start") {
@@ -113,11 +123,20 @@ export default function ChatPage() {
           setMessages((prev) => [...prev, streamEvent.message]);
           setStreamingActive(false);
         } else if (streamEvent.type === "error") {
-          setToolLines((prev) => [...prev, streamEvent.detail]);
+          setSendError(streamEvent.detail);
           setStreamingActive(false);
         }
-      });
+      }, controller.signal);
+    } catch (err) {
+      if (!controller.signal.aborted) {
+        setSendError(
+          err instanceof ApiError && err.status === 429
+            ? err.message
+            : "Your message could not be sent. Check the connection and try again.",
+        );
+      }
     } finally {
+      if (streamAbort.current === controller) streamAbort.current = null;
       setBusy(false);
       setStreamingActive(false);
       setStreamText("");
@@ -287,6 +306,11 @@ export default function ChatPage() {
           <div ref={endRef} />
         </div>
 
+        {sendError ? (
+          <p role="alert" className="mx-auto w-full max-w-[720px] px-6 pb-2 text-[0.875rem] text-risk">
+            {sendError}
+          </p>
+        ) : null}
         {selectedId ? (
           <form
             onSubmit={onSend}

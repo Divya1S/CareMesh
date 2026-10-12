@@ -260,6 +260,7 @@ export default function BillingPage() {
                     </p>
                     <div className="mt-2 flex items-end gap-2">
                       <input
+                        aria-label="Resubmission note"
                         value={resubmitNotes[c.claim_id] ?? ""}
                         onChange={(e) =>
                           setResubmitNotes((prev) => ({

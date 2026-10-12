@@ -48,7 +48,24 @@ async function parseProblem(response: Response): Promise<ApiError> {
   }
 }
 
-async function tryRefresh(): Promise<boolean> {
+let refreshInFlight: Promise<boolean> | null = null;
+
+/**
+ * Single flight: refresh tokens are single use on the server, so when two
+ * requests get a 401 at the same moment only one refresh may run. The
+ * second caller awaits the same promise instead of presenting the token
+ * again, which the server would treat as reuse and revoke the session.
+ */
+function tryRefresh(): Promise<boolean> {
+  if (!refreshInFlight) {
+    refreshInFlight = refreshOnce().finally(() => {
+      refreshInFlight = null;
+    });
+  }
+  return refreshInFlight;
+}
+
+async function refreshOnce(): Promise<boolean> {
   const refresh = getRefreshToken();
   if (!refresh) return false;
   const response = await fetch(`${BASE_URL}/api/v1/auth/refresh`, {
@@ -250,11 +267,17 @@ export type StreamEvent =
   | { type: "message"; message: Message }
   | { type: "error"; detail: string };
 
-/** Streams Dira's reply over SSE, invoking onEvent per event. */
+/**
+ * Streams Dira's reply over SSE, invoking onEvent per event. Refreshes an
+ * expired access token once like request() does, and stops reading when
+ * the signal aborts (the page navigated away).
+ */
 export async function streamMessage(
   conversationId: string,
   content: string,
   onEvent: (event: StreamEvent) => void,
+  signal?: AbortSignal,
+  retryOn401 = true,
 ): Promise<void> {
   const token = getAccessToken();
   const response = await fetch(
@@ -266,23 +289,43 @@ export async function streamMessage(
         ...(token ? { authorization: `Bearer ${token}` } : {}),
       },
       body: JSON.stringify({ content }),
+      signal,
     },
   );
+  if (response.status === 401 && retryOn401 && (await tryRefresh())) {
+    return streamMessage(conversationId, content, onEvent, signal, false);
+  }
   if (!response.ok || !response.body) throw await parseProblem(response);
-  const reader = response.body.getReader();
+  for await (const event of parseSse(response.body, signal)) {
+    onEvent(event);
+  }
+}
+
+/** Parses "data: <json>" lines from a byte stream, carrying partial lines
+ * across chunk boundaries. */
+export async function* parseSse(
+  body: ReadableStream<Uint8Array>,
+  signal?: AbortSignal,
+): AsyncGenerator<StreamEvent> {
+  const reader = body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split("\n");
-    buffer = lines.pop() ?? "";
-    for (const line of lines) {
-      if (line.startsWith("data: ")) {
-        onEvent(JSON.parse(line.slice(6)) as StreamEvent);
+  try {
+    for (;;) {
+      if (signal?.aborted) break;
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? "";
+      for (const line of lines) {
+        if (line.startsWith("data: ")) {
+          yield JSON.parse(line.slice(6)) as StreamEvent;
+        }
       }
     }
+  } finally {
+    reader.releaseLock();
   }
 }
 

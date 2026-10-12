@@ -166,6 +166,7 @@ export default function PayerPage() {
                 <div className="mt-2 flex flex-wrap items-end gap-2">
                   <Button onClick={() => decide(c, true)}>Approve</Button>
                   <input
+                    aria-label="Denial reason"
                     value={denyReason[c.claim_id] ?? ""}
                     onChange={(e) =>
                       setDenyReason((prev) => ({

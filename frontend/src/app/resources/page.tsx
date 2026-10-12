@@ -8,12 +8,13 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
 import {
+  ApiError,
   askKnowledge,
   listKnowledgeDocuments,
   type KnowledgeAnswer,
   type KnowledgeDocument,
 } from "@/lib/api";
-import { isLoggedIn } from "@/lib/auth";
+import { clearTokens, isLoggedIn } from "@/lib/auth";
 
 export default function ResourcesPage() {
   const router = useRouter();
@@ -22,6 +23,7 @@ export default function ResourcesPage() {
   const [answer, setAnswer] = useState<KnowledgeAnswer | null>(null);
   const [busy, setBusy] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isLoggedIn()) {
@@ -31,6 +33,13 @@ export default function ResourcesPage() {
     (async () => {
       try {
         setDocuments(await listKnowledgeDocuments());
+      } catch (err) {
+        if (err instanceof ApiError && err.status === 401) {
+          clearTokens();
+          router.replace("/login");
+          return;
+        }
+        setError("The library could not be loaded. Try again in a moment.");
       } finally {
         setLoaded(true);
       }
@@ -41,8 +50,15 @@ export default function ResourcesPage() {
     event.preventDefault();
     if (!question.trim()) return;
     setBusy(true);
+    setError(null);
     try {
       setAnswer(await askKnowledge(question.trim()));
+    } catch (err) {
+      setError(
+        err instanceof ApiError && err.status === 429
+          ? err.message
+          : "That question could not be answered right now. Try again in a moment.",
+      );
     } finally {
       setBusy(false);
     }
@@ -86,6 +102,12 @@ export default function ResourcesPage() {
           {busy ? "Looking…" : "Ask"}
         </Button>
       </form>
+
+      {error ? (
+        <p role="alert" className="mb-4 text-[0.875rem] text-risk">
+          {error}
+        </p>
+      ) : null}
 
       {answer ? (
         answer.grounded ? (
