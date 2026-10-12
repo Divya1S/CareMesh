@@ -157,6 +157,7 @@ class SqlAuthSessionRepository:
                 expires_at=auth_session.expires_at,
                 created_at=auth_session.created_at,
                 revoked_at=auth_session.revoked_at,
+                family_id=auth_session.family_id,
             )
         )
 
@@ -172,15 +173,35 @@ class SqlAuthSessionRepository:
             token_hash=row.token_hash,
             expires_at=row.expires_at,
             created_at=row.created_at,
+            family_id=row.family_id,
             revoked_at=row.revoked_at,
         )
 
-    async def revoke(self, session_id: UUID, revoked_at: datetime) -> None:
-        await self._session.execute(
+    async def revoke_if_active(self, session_id: UUID, revoked_at: datetime) -> bool:
+        result = await self._session.execute(
             update(AuthSessionRow)
-            .where(AuthSessionRow.id == session_id)
+            .where(AuthSessionRow.id == session_id, AuthSessionRow.revoked_at.is_(None))
             .values(revoked_at=revoked_at)
         )
+        return result.rowcount == 1
+
+
+class SqlSessionRevoker:
+    """Own session per call: the request that detects reuse fails with a
+    401 and rolls back, and the revocation must outlive that rollback."""
+
+    def __init__(self, session_factory) -> None:
+        self._session_factory = session_factory
+
+    async def revoke_family(self, family_id: UUID, revoked_at: datetime) -> int:
+        async with self._session_factory() as session:
+            result = await session.execute(
+                update(AuthSessionRow)
+                .where(AuthSessionRow.family_id == family_id, AuthSessionRow.revoked_at.is_(None))
+                .values(revoked_at=revoked_at)
+            )
+            await session.commit()
+            return result.rowcount
 
 
 class SqlConversationRepository:

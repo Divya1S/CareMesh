@@ -48,6 +48,9 @@ class AuthSession:
     token_hash: str
     expires_at: datetime
     created_at: datetime
+    # Every rotation stays in the family its login started. Reuse of an
+    # already rotated token revokes the whole family.
+    family_id: UUID
     revoked_at: datetime | None = None
 
 

@@ -1,3 +1,5 @@
+import asyncio
+
 import pytest
 
 pytestmark = pytest.mark.integration
@@ -47,17 +49,18 @@ async def test_refresh_rotates_and_revokes_old_token(client, seeded, login):
     assert first.status_code == 200
     assert first.json()["refresh_token"] != tokens["refresh_token"]
 
-    # The old refresh token is single use, so a replay must fail.
-    replay = await client.post(
-        "/api/v1/auth/refresh", json={"refresh_token": tokens["refresh_token"]}
-    )
-    assert replay.status_code == 401
-
-    # The rotated token still works.
+    # The rotated token works.
     second = await client.post(
         "/api/v1/auth/refresh", json={"refresh_token": first.json()["refresh_token"]}
     )
     assert second.status_code == 200
+
+    # The old refresh token is single use, so a replay must fail. (Reuse
+    # also revokes the whole family; that path has its own test below.)
+    replay = await client.post(
+        "/api/v1/auth/refresh", json={"refresh_token": tokens["refresh_token"]}
+    )
+    assert replay.status_code == 401
 
 
 async def test_access_token_rejected_as_refresh_token(client, seeded, login):
@@ -72,3 +75,39 @@ async def test_request_id_header_present(client, seeded):
     response = await client.get("/healthz")
     assert response.status_code == 200
     assert response.headers.get("x-request-id")
+
+
+async def test_reusing_a_rotated_refresh_token_revokes_the_family(client, seeded, login):
+    """Stolen token scenario: the thief refreshes first and holds a valid
+    pair. When the real client presents the old token, reuse is detected
+    and the whole family dies, including the thief's new token."""
+    first = await login("patient@a.caremesh.org")
+    second = (
+        await client.post("/api/v1/auth/refresh", json={"refresh_token": first["refresh_token"]})
+    ).json()
+
+    reuse = await client.post(
+        "/api/v1/auth/refresh", json={"refresh_token": first["refresh_token"]}
+    )
+    assert reuse.status_code == 401
+    assert "already used" in reuse.json()["detail"]
+
+    thief = await client.post(
+        "/api/v1/auth/refresh", json={"refresh_token": second["refresh_token"]}
+    )
+    assert thief.status_code == 401, "the family was revoked"
+
+    # A fresh login starts a new family and works normally.
+    again = await login("patient@a.caremesh.org")
+    ok = await client.post("/api/v1/auth/refresh", json={"refresh_token": again["refresh_token"]})
+    assert ok.status_code == 200
+
+
+async def test_concurrent_refreshes_with_one_token_let_exactly_one_win(client, seeded, login):
+    first = await login("patient@a.caremesh.org")
+    body = {"refresh_token": first["refresh_token"]}
+    a, b = await asyncio.gather(
+        client.post("/api/v1/auth/refresh", json=body),
+        client.post("/api/v1/auth/refresh", json=body),
+    )
+    assert sorted([a.status_code, b.status_code]) == [200, 401]

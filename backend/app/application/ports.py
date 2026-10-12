@@ -31,7 +31,18 @@ class OrganizationRepository(Protocol):
 class AuthSessionRepository(Protocol):
     async def add(self, session: AuthSession) -> None: ...
     async def get_by_token_hash(self, token_hash: str) -> AuthSession | None: ...
-    async def revoke(self, session_id: UUID, revoked_at: datetime) -> None: ...
+    async def revoke_if_active(self, session_id: UUID, revoked_at: datetime) -> bool:
+        """Revokes the session only if it is still active. Returns whether
+        this caller won; a concurrent second use loses."""
+        ...
+
+
+class SessionRevoker(Protocol):
+    """Revokes a whole session family in its own transaction. Reuse
+    detection raises 401, which rolls the request back; the revocation
+    must survive that rollback, like an audit entry."""
+
+    async def revoke_family(self, family_id: UUID, revoked_at: datetime) -> int: ...
 
 
 class ConversationRepository(Protocol):

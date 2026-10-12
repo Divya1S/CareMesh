@@ -9,6 +9,7 @@ from app.application.ports import (
     AuditLog,
     AuthSessionRepository,
     PasswordHasher,
+    SessionRevoker,
     TokenService,
     UserRepository,
 )
@@ -37,6 +38,7 @@ class AuthService:
         hasher: PasswordHasher,
         tokens: TokenService,
         audit: AuditLog,
+        revoker: SessionRevoker,
         access_ttl_seconds: int,
         refresh_ttl_seconds: int,
     ) -> None:
@@ -45,6 +47,7 @@ class AuthService:
         self._hasher = hasher
         self._tokens = tokens
         self._audit = audit
+        self._revoker = revoker
         self._access_ttl = access_ttl_seconds
         self._refresh_ttl = refresh_ttl_seconds
 
@@ -76,19 +79,44 @@ class AuthService:
         )
 
     async def refresh(self, refresh_token: str) -> TokenPair:
+        """Rotation with reuse detection. Each refresh token is single use
+        and belongs to the family its login started. Presenting a token
+        that was already rotated means either a stolen token or a client
+        bug; either way every token in the family is revoked, so a thief
+        who refreshed first loses access as soon as the real client tries."""
         claims = self._tokens.decode(refresh_token, expected_type="refresh")
         session = await self._sessions.get_by_token_hash(self._tokens.token_hash(refresh_token))
         now = datetime.now(UTC)
-        if session is None or session.revoked_at is not None or session.expires_at <= now:
+        if session is None:
             raise UnauthorizedError("Refresh token is no longer valid")
+        if session.revoked_at is not None:
+            await self._revoke_family_for_reuse(session, now)
+            raise UnauthorizedError("Refresh token was already used; sign in again")
+        if session.expires_at <= now:
+            raise UnauthorizedError("Refresh token has expired")
         user = await self._users.get_by_id(UUID(claims["sub"]))
         if user is None or not user.is_active:
             raise UnauthorizedError("Account is not active")
-        # Rotation: each refresh token is single use.
-        await self._sessions.revoke(session.id, revoked_at=now)
-        return await self._issue_pair(user)
+        # Conditional revoke: of two concurrent uses exactly one wins. The
+        # loser is treated as reuse, because a legitimate client never
+        # presents the same token twice.
+        if not await self._sessions.revoke_if_active(session.id, revoked_at=now):
+            await self._revoke_family_for_reuse(session, now)
+            raise UnauthorizedError("Refresh token was already used; sign in again")
+        return await self._issue_pair(user, family_id=session.family_id)
 
-    async def _issue_pair(self, user: User) -> TokenPair:
+    async def _revoke_family_for_reuse(self, session: AuthSession, now: datetime) -> None:
+        revoked = await self._revoker.revoke_family(session.family_id, revoked_at=now)
+        await self._audit.record(
+            action="refresh_token_reuse",
+            organization_id=None,
+            actor_id=session.user_id,
+            resource_type="auth_session_family",
+            resource_id=session.family_id,
+            detail={"sessions_revoked": revoked},
+        )
+
+    async def _issue_pair(self, user: User, family_id: UUID | None = None) -> TokenPair:
         session_id = uuid7()
         refresh_token = self._tokens.create_refresh_token(user, session_id)
         now = datetime.now(UTC)
@@ -99,6 +127,8 @@ class AuthService:
                 token_hash=self._tokens.token_hash(refresh_token),
                 expires_at=now + timedelta(seconds=self._refresh_ttl),
                 created_at=now,
+                # A login starts a new family; a refresh stays in its own.
+                family_id=family_id or session_id,
             )
         )
         return TokenPair(

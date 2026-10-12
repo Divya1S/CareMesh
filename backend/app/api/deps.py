@@ -38,6 +38,7 @@ from app.infrastructure.repositories import (
     SqlRagRetrievalRepository,
     SqlReferralRepository,
     SqlRiskRepository,
+    SqlSessionRevoker,
     SqlUserRepository,
     SqlWorkflowRepository,
 )
@@ -83,7 +84,11 @@ AuditLogDep = Annotated[SqlAuditLog, Depends(get_audit_log)]
 
 
 def get_auth_service(
-    session: SessionDep, settings: SettingsDep, tokens: TokenServiceDep, audit: AuditLogDep
+    request: Request,
+    session: SessionDep,
+    settings: SettingsDep,
+    tokens: TokenServiceDep,
+    audit: AuditLogDep,
 ) -> AuthService:
     return AuthService(
         users=SqlUserRepository(session),
@@ -91,6 +96,7 @@ def get_auth_service(
         hasher=Argon2PasswordHasher(),
         tokens=tokens,
         audit=audit,
+        revoker=SqlSessionRevoker(request.app.state.audit_session_factory),
         access_ttl_seconds=settings.access_token_ttl_seconds,
         refresh_ttl_seconds=settings.refresh_token_ttl_seconds,
     )
