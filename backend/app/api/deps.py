@@ -19,12 +19,9 @@ from app.application.use_cases.ops import OpsService
 from app.application.use_cases.referrals import ReferralService
 from app.application.use_cases.reviews import ReviewService
 from app.domain.entities import User
-from app.infrastructure.ai.embeddings import create_embedding_provider
-from app.infrastructure.ai.factory import create_provider
 from app.infrastructure.payer.fake_payer import FakePayerAdapter
 from app.infrastructure.rate_limit import RedisRateLimiter
 from app.infrastructure.repositories import (
-    SqlAIRequestLog,
     SqlAIRequestQuery,
     SqlAppointmentRepository,
     SqlAuditLog,
@@ -76,7 +73,8 @@ TokenServiceDep = Annotated[JwtTokenService, Depends(get_token_service)]
 
 
 def get_audit_log(request: Request) -> SqlAuditLog:
-    return SqlAuditLog(request.app.state.session_factory)
+    # Own pool: an audit write never waits on the request's connection.
+    return SqlAuditLog(request.app.state.audit_session_factory)
 
 
 AuditLogDep = Annotated[SqlAuditLog, Depends(get_audit_log)]
@@ -96,19 +94,21 @@ def get_auth_service(
     )
 
 
-def get_ai_gateway(request: Request, settings: SettingsDep) -> AIGateway:
-    return AIGateway(
-        create_provider(settings.llm_provider),
-        SqlAIRequestLog(request.app.state.session_factory),
-        timeout_seconds=settings.ai_timeout_seconds,
-    )
+def get_ai_gateway(request: Request) -> AIGateway:
+    """Built once in the lifespan (see main.configure_state)."""
+    return request.app.state.gateway
+
+
+def get_embedder(request: Request):
+    return request.app.state.embedder
 
 
 AIGatewayDep = Annotated[AIGateway, Depends(get_ai_gateway)]
+EmbedderDep = Annotated[object, Depends(get_embedder)]
 
 
 def get_conversation_service(
-    session: SessionDep, gateway: AIGatewayDep, settings: SettingsDep
+    session: SessionDep, gateway: AIGatewayDep, embedder: EmbedderDep
 ) -> ConversationService:
     return ConversationService(
         conversations=SqlConversationRepository(session),
@@ -120,7 +120,7 @@ def get_conversation_service(
             documents=SqlDocumentRepository(session),
             chunks=SqlChunkRepository(session),
             retrievals=SqlRagRetrievalRepository(session),
-            embedder=create_embedding_provider(settings.embedding_provider),
+            embedder=embedder,
             gateway=None,
         ),
         appointments=SqlAppointmentRepository(session),
@@ -174,13 +174,13 @@ OpsServiceDep = Annotated[OpsService, Depends(get_ops_service)]
 
 
 def get_knowledge_service(
-    session: SessionDep, settings: SettingsDep, gateway: AIGatewayDep
+    session: SessionDep, gateway: AIGatewayDep, embedder: EmbedderDep
 ) -> KnowledgeService:
     return KnowledgeService(
         documents=SqlDocumentRepository(session),
         chunks=SqlChunkRepository(session),
         retrievals=SqlRagRetrievalRepository(session),
-        embedder=create_embedding_provider(settings.embedding_provider),
+        embedder=embedder,
         gateway=gateway,
     )
 

@@ -19,6 +19,15 @@ class Settings(BaseSettings):
         "postgresql+asyncpg://caremesh:caremesh_dev_password@localhost:5433/caremesh"
     )
 
+    # Request pool, and a separate small pool for the audit and AI request
+    # logs so a log write never waits on the connection its own request is
+    # holding (which could deadlock the whole pool under load).
+    db_pool_size: int = 5
+    db_max_overflow: int = 10
+    db_pool_timeout_seconds: float = 10.0
+    audit_pool_size: int = 2
+    audit_max_overflow: int = 3
+
     cors_origins: list[str] = ["http://localhost:3000"]
 
     redis_url: str = "redis://localhost:6379/0"

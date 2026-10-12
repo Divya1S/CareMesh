@@ -21,19 +21,62 @@ from app.api.routes import (
     reviews,
     school,
 )
+from app.application.ai.gateway import AIGateway
+from app.infrastructure.ai.embeddings import create_embedding_provider
+from app.infrastructure.ai.factory import create_provider
 from app.infrastructure.db import create_engine, create_session_factory
 from app.infrastructure.gauges import run_gauge_refresher
 from app.infrastructure.logging import configure_logging
-from app.infrastructure.settings import get_settings
+from app.infrastructure.repositories import SqlAIRequestLog
+from app.infrastructure.settings import Settings, get_settings
+
+
+def configure_state(app: FastAPI, settings: Settings, database_url: str) -> None:
+    """Builds the process wide objects once: two engines (request pool and
+    a separate audit pool), the LLM provider, the embedding model, and the
+    gateway. Shared by the lifespan and the test fixtures so both wire the
+    app the same way."""
+    engine = create_engine(
+        database_url,
+        pool_size=settings.db_pool_size,
+        max_overflow=settings.db_max_overflow,
+        pool_timeout=settings.db_pool_timeout_seconds,
+    )
+    audit_engine = create_engine(
+        database_url,
+        pool_size=settings.audit_pool_size,
+        max_overflow=settings.audit_max_overflow,
+        pool_timeout=settings.db_pool_timeout_seconds,
+    )
+    app.state.engine = engine
+    app.state.audit_engine = audit_engine
+    app.state.session_factory = create_session_factory(engine)
+    app.state.audit_session_factory = create_session_factory(audit_engine)
+    # Providers are built once: the semantic embedder loads a model, and a
+    # real LLM adapter keeps a pooled HTTP client.
+    app.state.llm_provider = create_provider(settings.llm_provider)
+    app.state.embedder = create_embedding_provider(settings.embedding_provider)
+    app.state.gateway = AIGateway(
+        app.state.llm_provider,
+        SqlAIRequestLog(app.state.audit_session_factory),
+        timeout_seconds=settings.ai_timeout_seconds,
+    )
+
+
+async def dispose_state(app: FastAPI) -> None:
+    provider = getattr(app.state, "llm_provider", None)
+    close = getattr(provider, "aclose", None)
+    if close is not None:
+        await close()
+    await app.state.audit_engine.dispose()
+    await app.state.engine.dispose()
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings = get_settings()
     configure_logging(settings.log_level, settings.log_json)
-    engine = create_engine(settings.database_url)
-    app.state.engine = engine
-    app.state.session_factory = create_session_factory(engine)
+    configure_state(app, settings, settings.database_url)
     # Bounded socket timeouts: a blackholed Redis must fail fast with an
     # error instead of hanging every login and chat request forever.
     app.state.redis = Redis.from_url(
@@ -43,7 +86,7 @@ async def lifespan(app: FastAPI):
     yield
     gauge_task.cancel()
     await app.state.redis.aclose()
-    await engine.dispose()
+    await dispose_state(app)
 
 
 def create_app() -> FastAPI:

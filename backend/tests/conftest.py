@@ -10,7 +10,6 @@ from sqlalchemy import text
 
 from app.domain.entities import CareAssignment, Organization, Role, User
 from app.domain.ids import uuid7
-from app.infrastructure.db import create_engine, create_session_factory
 from app.infrastructure.repositories import (
     SqlCareAssignmentRepository,
     SqlOrganizationRepository,
@@ -58,12 +57,13 @@ def migrated() -> None:
 async def app(migrated):
     from redis.asyncio import Redis
 
-    from app.main import create_app
+    from app.main import configure_state, create_app, dispose_state
 
+    # ASGITransport does not run the lifespan, so wire the state the same
+    # way the lifespan does, against the test database.
     application = create_app()
-    engine = create_engine(TEST_DB_URL)
-    application.state.engine = engine
-    application.state.session_factory = create_session_factory(engine)
+    configure_state(application, get_settings(), TEST_DB_URL)
+    engine = application.state.engine
     application.state.redis = Redis.from_url(TEST_REDIS_URL)
     yield application
     await application.state.redis.aclose()
@@ -78,7 +78,7 @@ async def app(migrated):
                 "guardian_notifications, audit_logs, appointment_requests CASCADE"
             )
         )
-    await engine.dispose()
+    await dispose_state(application)
 
 
 @pytest.fixture
