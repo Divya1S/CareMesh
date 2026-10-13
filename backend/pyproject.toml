@@ -2,7 +2,7 @@
 name = "caremesh-backend"
 version = "0.1.0"
 description = "CareMesh AI backend. Portfolio simulation, not a real healthcare product."
-requires-python = ">=3.13"
+requires-python = ">=3.13,<3.15"
 dependencies = [
     "fastapi>=0.115",
     "uvicorn[standard]>=0.32",
